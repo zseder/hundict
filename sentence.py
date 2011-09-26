@@ -59,5 +59,9 @@ class Sentence:
         for pos in positions:
             del self._sen[pos:pos+len(ngram)]
 
+            # maintaining index
+            for i in xrange(len(ngram)):
+                self._index[ngram[i]].remove(pos+i)
+
 
 
