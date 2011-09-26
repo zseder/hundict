@@ -55,12 +55,17 @@ class Corpus:
                 valid_occ.add(sen_i)
         return valid_occ
 
-    def remove_ngram(self, ngram):
-        # TODO
-        # indices counted twice
-        for sen_i in self.ngram_index(ngram):
+    def remove_ngram(self, ngram, ind=None):
+        if ind is None:
+            ind = self.ngram_index(ngram)
+        for sen_i in ind:
             sen = self._corpus[sen_i]
             sen.remove_ngram(ngram)
+
+            # maintaining index
+            for tok in ngram:
+                if not tok in sen:
+                    self._index[tok].remove(sen_i)
 
     @classmethod
     def read_from_file(f):
