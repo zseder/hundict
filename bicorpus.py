@@ -36,3 +36,8 @@ class BiCorpus:
         
         return context
 
+    def remove_ngram_pair(self, pair):
+        src, tgt = pair
+        indices = self._src.ngram_index(src) & self._tgt.ngram_index(tgt)
+        self._src.remove_ngram(src, indices)
+        self._tgt.remove_ngram(tgt, indices)
