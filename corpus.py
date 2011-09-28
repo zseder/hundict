@@ -27,9 +27,12 @@ class Corpus:
     def __delitem__(self, key):
         del self._corpus[key]
 
+    def append(self, item):
+        self.add_sentence(item)
+
     def add_sentence(self, sen):
         self._corpus.append(sen)
-        sen_index = len(self._corpus)
+        sen_index = len(self._corpus) - 1
         for tok in sen:
             self._index[tok].add(sen_index)
 
@@ -55,20 +58,26 @@ class Corpus:
                 valid_occ.add(sen_i)
         return valid_occ
 
-    def remove_ngram(self, ngram, ind=None):
+    def remove_ngram(self, ngram, ind=None, hide=False):
         if ind is None:
             ind = self.ngram_index(ngram)
         for sen_i in ind:
             sen = self._corpus[sen_i]
-            sen.remove_ngram(ngram)
+            sen.remove_ngram(ngram, hide)
 
             # maintaining index
             for tok in ngram:
                 if not tok in sen:
                     self._index[tok].remove(sen_i)
+                    if len(self._index[tok]) == 0:
+                        del self._index[tok]
 
-    @classmethod
-    def read_from_file(f):
+    def clean_multiple_hapax_sentences(self):
+        # TODO implement if needed
+        pass
+
+    @staticmethod
+    def read_from_file(cls, f):
         c = Corpus()
         for l in f:
             le = l.strip().decode("utf-8").split()
