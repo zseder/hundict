@@ -77,7 +77,7 @@ class Corpus:
         pass
 
     @staticmethod
-    def read_from_file(cls, f):
+    def read_from_file(f):
         c = Corpus()
         for l in f:
             le = l.strip().decode("utf-8").split()
