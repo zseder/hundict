@@ -1,3 +1,8 @@
+import logging
+
+from sentence import Sentence
+from corpus import Corpus
+
 class BiCorpus:
     def __init__(self, src, tgt):
         self._src = src
@@ -36,8 +41,41 @@ class BiCorpus:
         
         return context
 
-    def remove_ngram_pair(self, pair):
+    def remove_ngram_pair(self, pair, hide=False):
         src, tgt = pair
         indices = self._src.ngram_index(src) & self._tgt.ngram_index(tgt)
-        self._src.remove_ngram(src, indices)
-        self._tgt.remove_ngram(tgt, indices)
+        self._src.remove_ngram(src, indices, hide)
+        self._tgt.remove_ngram(tgt, indices, hide)
+
+    def generate_unigram_pairs(self, min_coocc=1, max_coocc=None):
+        src_index = self._src._index
+        tgt_index = self._tgt._index
+        corp_len = len(self._src)
+
+        for src_tok in src_index:
+            src_occ = src_index[src_tok] 
+            for tgt_tok in tgt_index:
+                tgt_occ = tgt_index[tgt_tok]
+                coocc = src_occ.intersection(tgt_occ)
+                if len(coocc) >= min_coocc and (max_coocc is None or 
+                                               len(coocc) <= max_coocc):
+                    cont_table = (len(coocc), len(src_occ.difference(tgt_occ)), len(tgt_occ.difference(src_occ)), corp_len - len(src_occ.union(tgt_occ)))
+                    yield (((src_tok,), (tgt_tok,)), cont_table)
+
+
+    @staticmethod
+    def read_from_file(f):
+        src_c = Corpus()
+        tgt_c = Corpus()
+        logging.info("Reading bicorpus started...")
+        for l in f:
+            l = l.rstrip("\n")
+            if len(l) == 0:
+                continue
+            src, tgt = l.decode("utf-8").split("\t")
+            src_c.append(Sentence(src.split()))
+            tgt_c.append(Sentence(tgt.split()))
+        logging.info("Reading bicorpus done.")
+
+        bc = BiCorpus(src_c, tgt_c)
+        return bc
