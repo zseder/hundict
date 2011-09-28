@@ -86,7 +86,7 @@ class DictBuilder:
             # remove pairs that are found to be good and yield them
             for result in mutual_pairs:
                 pair, score = result
-                self._bicorpus.remove_ngram_pair(pair, hide=False)
+                self._bicorpus.remove_ngram_pair(pair)
                 self._dict[pair] = score
             
             logging.info("done at {0}".format(time.asctime()))
@@ -120,6 +120,7 @@ def create_option_parser():
     parser.add_option("", "--src_stopwords", dest="src_stop", help="src stopwords file")
     parser.add_option("", "--tgt_stopwords", dest="tgt_stop", help="tgt stopwords file")
     parser.add_option("", "--iters", dest="iters", help="number of iterations")
+    parser.add_option("-r", "--remaining", dest="remaining", help="output file for remaining corpus")
 
     return parser
 
@@ -136,38 +137,53 @@ def parse_options(parser):
         iters = int(options.iters)
 
     # stopwords
+    punct = set([".", "!", "?", ",", "-", ":", "'", "...", "--", ";", "(", ")"])
     src_stopwords = set()
     if options.src_stop:
-        src_stopwords = set(file(options.src_stop).read().decode("utf-8").rstrip("\n").split("\n"))
+        src_stopwords = set(file(options.src_stop).read().decode("utf-8").rstrip("\n").split("\n")) | punct
     tgt_stopwords = set()
     if options.tgt_stop:
-        tgt_stopwords = set(file(options.tgt_stop).read().decode("utf-8").rstrip("\n").split("\n"))
+        tgt_stopwords = set(file(options.tgt_stop).read().decode("utf-8").rstrip("\n").split("\n")) | punct
 
     # gold dict
     gold = Dictionary()
     if options.dict:
         gold = Dictionary.read_from_file(file(options.dict))
-    return input_file, bound, scorer, iters, src_stopwords, tgt_stopwords, gold
+    
+    rem = None
+    if options.remaining:
+        rem = options.remaining
+    return input_file, bound, scorer, iters, src_stopwords, tgt_stopwords, gold, rem
 
 def main():
     optparser = create_option_parser()
-    input_file, bound, _scorer, iters, srcstop, tgtstop, gold = parse_options(optparser)
+    input_file, bound, _scorer, iters, srcstop, tgtstop, gold, rem = parse_options(optparser)
     logging.basicConfig(level=logging.INFO)
     scorer = getattr(DictBuilder, _scorer)
     bc = BiCorpus.read_from_file(file(input_file))
     
+    if rem is not None:
+        bc.backup = True
+
     for w in srcstop:
-        bc._src.remove_ngram((w,))
+        bc._src.remove_ngram((w,), backup=bc.backup)
     for w in tgtstop:
-        bc._tgt.remove_ngram((w,))
+        bc._tgt.remove_ngram((w,), backup=bc.backup)
 
     for pair in gold:
-        bc.remove_ngram_pair[pair]
+        bc.remove_ngram_pair(pair)
 
     db = DictBuilder(bc, scorer)
+
     db.build(bound, iters=iters)
     for p in db._dict:
-        print p
+        src, tgt = p
+        print u"{0}\t{1}\t{2}".format(" ".join(src),
+                                      " ".join(tgt),
+                                      db._dict[p]).encode("utf-8")
+
+    if rem is not None:
+        bc.write(open(rem, "w")) 
 
 if __name__ == "__main__":
     import cProfile
