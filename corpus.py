@@ -58,12 +58,12 @@ class Corpus:
                 valid_occ.add(sen_i)
         return valid_occ
 
-    def remove_ngram(self, ngram, ind=None, hide=False):
+    def remove_ngram(self, ngram, ind=None, backup=False):
         if ind is None:
             ind = self.ngram_index(ngram)
         for sen_i in ind:
             sen = self._corpus[sen_i]
-            sen.remove_ngram(ngram, hide)
+            sen.remove_ngram(ngram, backup)
 
             # maintaining index
             for tok in ngram:

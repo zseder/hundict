@@ -41,11 +41,11 @@ class BiCorpus:
         
         return context
 
-    def remove_ngram_pair(self, pair, hide=False):
+    def remove_ngram_pair(self, pair, backup=False):
         src, tgt = pair
         indices = self._src.ngram_index(src) & self._tgt.ngram_index(tgt)
-        self._src.remove_ngram(src, indices, hide)
-        self._tgt.remove_ngram(tgt, indices, hide)
+        self._src.remove_ngram(src, indices, backup)
+        self._tgt.remove_ngram(tgt, indices, backup)
 
     def generate_unigram_pairs(self, min_coocc=1, max_coocc=None):
         src_index = self._src._index
