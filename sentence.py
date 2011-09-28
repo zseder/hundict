@@ -33,8 +33,8 @@ class Sentence:
             self._index[tok].add(i)
 
     def ngram_positions(self, ngram):
-        if not isinstance(ngram, Ngram):
-            raise TypeError
+        #if not isinstance(ngram, Ngram):
+            #raise TypeError
         result = []
 
         for starter_index in self._index[ngram[0]]:
@@ -54,14 +54,20 @@ class Sentence:
                 result.append(starter_index)
         return result
 
-    def remove_ngram(self, ngram):
+    def remove_ngram(self, ngram, hide=False):
         positions = self.ngram_positions(ngram)
         for pos in positions:
+            if hide:
+                if not "_filtered_sen" in self.__dict__:
+                    self._filtered_sen = list(self._sen)
+
+                for ngram_pos in xrange(len(ngram)):
+                    self._filtered_sen[pos+ngram_pos] = "[" + self._filtered_sen[pos+ngram_pos] + "]"
             del self._sen[pos:pos+len(ngram)]
 
             # maintaining index
             for i in xrange(len(ngram)):
                 self._index[ngram[i]].remove(pos+i)
-
-
+                if len(self._index[ngram[i]]) == 0:
+                   del self._index[ngram[i]]
 
