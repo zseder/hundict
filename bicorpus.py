@@ -4,9 +4,16 @@ from sentence import Sentence
 from corpus import Corpus
 
 class BiCorpus:
-    def __init__(self, src, tgt):
+    def __init__(self, src, tgt, backup=False):
         self._src = src
         self._tgt = tgt
+        self.backup = backup
+
+    def write(self, out):
+        for src_sen, tgt_sen in zip(self._src, self._tgt):
+            src_str = src_sen.to_str(self.backup)
+            tgt_str = tgt_sen.to_str(self.backup)
+            out.write(u"{0}\t{1}\n".format(src_str, tgt_str).encode("utf-8"))
 
     def ngram_pair_context(self, pair, max_len=None):
         src, tgt = pair
@@ -41,11 +48,11 @@ class BiCorpus:
         
         return context
 
-    def remove_ngram_pair(self, pair, backup=False):
+    def remove_ngram_pair(self, pair):
         src, tgt = pair
         indices = self._src.ngram_index(src) & self._tgt.ngram_index(tgt)
-        self._src.remove_ngram(src, indices, backup)
-        self._tgt.remove_ngram(tgt, indices, backup)
+        self._src.remove_ngram(src, indices, self.backup)
+        self._tgt.remove_ngram(tgt, indices, self.backup)
 
     def generate_unigram_pairs(self, min_coocc=1, max_coocc=None):
         src_index = self._src._index
