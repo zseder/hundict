@@ -24,6 +24,9 @@ class Sentence:
 
     def __contains__(self, item):
         return item in self._index
+    
+    def __str__(self):
+        return " ".join(self._sen)
 
     def create_tok_index(self):
         self._index = defaultdict(set)
@@ -65,5 +68,8 @@ class Sentence:
             for i in xrange(len(ngram)):
                 self._index[ngram[i]].remove(pos+i)
                 if len(self._index[ngram[i]]) == 0:
-                   del self._index[ngram[i]]
-
+                    del self._index[ngram[i]]
+    
+    def to_str(self, backup=False):
+        return (" ".join(self._backup_sen) if hasattr(self, "_backup_sen") and backup else
+                " ".join(self._sen))
