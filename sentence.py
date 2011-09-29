@@ -1,9 +1,6 @@
-from collections import defaultdict
-
 class Sentence:
     def __init__(self, tokens):
         self._sen = list(tokens)
-        self.create_tok_index()
 
     def __len__(self):
         return len(self._sen)
@@ -28,15 +25,10 @@ class Sentence:
     def __str__(self):
         return " ".join(self._sen)
 
-    def create_tok_index(self):
-        self._index = defaultdict(set)
-        for i, tok in enumerate(self._sen):
-            self._index[tok].add(i)
-
     def ngram_positions(self, ngram):
         result = []
 
-        for starter_index in self._index[ngram[0]]:
+        for starter_index in (i for i, tok in enumerate(self._sen) if tok == ngram[0]):
             good = True
             for tok_i, tok in enumerate(ngram[1:]):
                 try:
@@ -64,12 +56,6 @@ class Sentence:
                     self._backup_sen[pos+ngram_pos] = "[" + self._backup_sen[pos+ngram_pos] + "]"
             del self._sen[pos:pos+len(ngram)]
 
-            # maintaining index
-            for i in xrange(len(ngram)):
-                self._index[ngram[i]].remove(pos+i)
-                if len(self._index[ngram[i]]) == 0:
-                    del self._index[ngram[i]]
-    
     def to_str(self, backup=False):
         return (" ".join(self._backup_sen) if hasattr(self, "_backup_sen") and backup else
                 " ".join(self._sen))
