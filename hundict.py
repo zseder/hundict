@@ -2,6 +2,7 @@ from math import log
 import logging
 from optparse import OptionParser
 import time
+import sys
 
 from dictionary import Dictionary
 from bicorpus import BiCorpus
@@ -121,7 +122,7 @@ def create_option_parser():
     parser.add_option("", "--tgt_stopwords", dest="tgt_stop", help="tgt stopwords file")
     parser.add_option("", "--iters", dest="iters", help="number of iterations")
     parser.add_option("-r", "--remaining", dest="remaining", help="output file for remaining corpus")
-
+    parser.add_option("-l", "--loglevel", dest="loglevel", help="logging level. [DEBUG/INFO/WARNING/ERROR/CRITICAL]")
     return parser
 
 def parse_options(parser):
@@ -153,12 +154,18 @@ def parse_options(parser):
     rem = None
     if options.remaining:
         rem = options.remaining
+
+    if options.loglevel:
+        try:
+            logging.basicConfig(level=logging.__dict__[options.loglevel], format="%(asctime)s : %(module)s - %(levelname)s - %(message)s (%(lineno)d)")
+        except KeyError:
+            print "Not a logging level. See(k) help."
+            sys.exit(-1)
     return input_file, bound, scorer, iters, src_stopwords, tgt_stopwords, gold, rem
 
 def main():
     optparser = create_option_parser()
     input_file, bound, _scorer, iters, srcstop, tgtstop, gold, rem = parse_options(optparser)
-    logging.basicConfig(level=logging.INFO)
     scorer = getattr(DictBuilder, _scorer)
     bc = BiCorpus.read_from_file(file(input_file))
     
