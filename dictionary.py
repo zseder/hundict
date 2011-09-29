@@ -33,7 +33,12 @@ class Dictionary:
             l = l.strip().decode("utf-8").split("\t")
             src = tuple(l[0].split())
             tgt = tuple(l[1].split())
-            score = float(l[2])
+            try:
+                score = float(l[2])
+            except IndexError:
+                score = 0.
+            except ValueError:
+                score = 0.
             d[(src, tgt)] = score
         return d
 
