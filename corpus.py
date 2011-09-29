@@ -43,6 +43,9 @@ class Corpus:
                 self._index[tok].add(i)
     
     def ngram_index(self, ngram):
+        if ngram[0] not in self._index:
+            return set()
+
         occ = set(self._index[ngram[0]])
             
         if len(ngram) == 1:
