@@ -7,8 +7,6 @@ class Sentence:
 
     def __iter__(self):
         return iter(self._sen)
-    def __reversed__(self):
-        return reversed(self._sen)
 
     def __getitem__(self, key):
         return self._sen[key]
@@ -20,7 +18,7 @@ class Sentence:
         del self._sen[key]
 
     def __contains__(self, item):
-        return item in self._index
+        return item in self._sen
     
     def __str__(self):
         return " ".join(self._sen)
@@ -45,17 +43,26 @@ class Sentence:
                 result.append(starter_index)
         return result
 
+    def init_backup(self):
+        if not "_backup_sen" in self.__dict__:
+            self._backup_sen = list(self._sen)
+
     def remove_ngram(self, ngram, backup=False):
         positions = self.ngram_positions(ngram)
         for pos in positions:
             if backup:
-                if not "_backup_sen" in self.__dict__:
-                    self._backup_sen = list(self._sen)
+                self.init_backup()
 
                 for ngram_pos in xrange(len(ngram)):
-                    self._backup_sen[pos+ngram_pos] = "[" + self._backup_sen[pos+ngram_pos] + "]"
+                    self._backup_sen[pos+ngram_pos] = (self._backup_sen[pos+ngram_pos],)
             del self._sen[pos:pos+len(ngram)]
 
-    def to_str(self, backup=False):
-        return (" ".join(self._backup_sen) if hasattr(self, "_backup_sen") and backup else
-                " ".join(self._sen))
+    def remove_toks(self, toks, backup=False):
+        if backup:
+            self.init_backup()
+            for i, tok in enumerate(self._sen):
+                if tok in toks:
+                    self._backup_sen[i] = (tok,)
+        self._sen = filter(lambda x: x not in toks, self._sen)
+               
+
