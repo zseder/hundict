@@ -157,7 +157,7 @@ def parse_options(parser):
 
     if options.loglevel:
         try:
-            logging.basicConfig(level=logging.__dict__[options.loglevel], format="%(asctime)s : %(module)s - %(levelname)s - %(message)s (%(lineno)d)")
+            logging.basicConfig(level=logging.__dict__[options.loglevel], format="%(asctime)s : %(module)s - %(levelname)s - %(message)s")
         except KeyError:
             print "Not a logging level. See(k) help."
             sys.exit(-1)
@@ -167,16 +167,15 @@ def main():
     optparser = create_option_parser()
     input_file, bound, _scorer, iters, srcstop, tgtstop, gold, rem = parse_options(optparser)
     scorer = getattr(DictBuilder, _scorer)
-    bc = BiCorpus.read_from_file(file(input_file))
+
+    backup = rem is not None
+
+    bc = BiCorpus(backup=backup, int_tokens=True)
+
+    bc.set_stopwords(srcstop, tgtstop)
+
+    bc.read_from_file(file(input_file))
     
-    if rem is not None:
-        bc.backup = True
-
-    for w in srcstop:
-        bc._src.remove_ngram((w,), backup=bc.backup)
-    for w in tgtstop:
-        bc._tgt.remove_ngram((w,), backup=bc.backup)
-
     for pair in gold:
         bc.remove_ngram_pair(pair)
 
