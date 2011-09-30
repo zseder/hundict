@@ -3,12 +3,15 @@ from collections import defaultdict
 from sentence import Sentence
 
 class Corpus:
-    def __init__(self, sentences=None):
-        if sentences is not None:
-            self._corpus = sentences
-        else:
-            self._corpus = []
+    def __init__(self, backup, int_tokens=False):
+        self._corpus = []
         self.create_index()
+
+        self._backup = backup
+
+        self._int_tokens = int_tokens
+        if self._int_tokens:
+            self.tokmap = {}
 
     def __len__(self):
         return len(self._corpus)
@@ -31,9 +34,21 @@ class Corpus:
         self.add_sentence(item)
 
     def add_sentence(self, sen):
-        self._corpus.append(sen)
+        # change tokens to ints
+        if self._int_tokens:
+            sen = self.tokens_to_ints(sen)
+
+        # create actual Sentence instance
+        new_sen = Sentence(sen)
+        self._corpus.append(new_sen)
+
+        # filter stopwords
+        if hasattr(self, "_stopwords"):
+            new_sen.remove_toks(self._stopwords, self._backup)
+
+        # register to index
         sen_index = len(self._corpus) - 1
-        for tok in sen:
+        for tok in new_sen:
             self._index[tok].add(sen_index)
 
     def create_index(self):
@@ -43,6 +58,8 @@ class Corpus:
                 self._index[tok].add(i)
     
     def ngram_index(self, ngram):
+        if self._int_tokens:
+            ngram = self.tokens_to_ints(ngram)
         if ngram[0] not in self._index:
             return set()
 
@@ -62,6 +79,7 @@ class Corpus:
         return valid_occ
 
     def remove_ngram(self, ngram, ind=None, backup=False):
+        ngram = self.tokens_to_ints(ngram)
         if ind is None:
             ind = self.ngram_index(ngram)
         for sen_i in ind:
@@ -74,6 +92,22 @@ class Corpus:
                     self._index[tok].remove(sen_i)
                     if len(self._index[tok]) == 0:
                         del self._index[tok]
+
+    def tokens_to_ints(self, tokens):
+        # sometimes tokens are already changed
+        if type(tokens[0]) == int:
+            return tokens
+
+        ints = []
+        for tok in tokens:
+            if not tok in self.tokmap:
+                self.tokmap[tok] = len(self.tokmap)
+            ints.append(self.tokmap[tok])
+        return ints
+    
+    def set_stopwords(self, stopwords):
+        if len(stopwords) != 0:
+            self._stopwords = set(self.tokens_to_ints(list(stopwords)))
 
     def clean_multiple_hapax_sentences(self):
         # TODO implement if needed
