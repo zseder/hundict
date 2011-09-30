@@ -1,22 +1,18 @@
 import logging
 import gc
+from collections import defaultdict
+from operator import itemgetter
 
-from sentence import Sentence
 from corpus import Corpus
 
 class BiCorpus:
-    def __init__(self, src, tgt, backup=False, tok_coocc_caching=True, int_tokens=False):
-        self._src = src
-        self._tgt = tgt
+    def __init__(self, backup=False, tok_coocc_caching=True, int_tokens=False):
+        self._src = Corpus(backup, int_tokens)
+        self._tgt = Corpus(backup, int_tokens)
         self._backup = backup
         self._coocc_caching = tok_coocc_caching
         if self._coocc_caching:
             self._src_coocc_cache = {}
-
-        self._int_tokens = int_tokens
-        if int_tokens:
-            self._src_tokens = {} 
-            self._tgt_tokens = {}
 
     def write(self, out):
         for src_sen, tgt_sen in zip(self._src, self._tgt):
@@ -24,30 +20,19 @@ class BiCorpus:
             tgt_str = tgt_sen.to_str(self._backup)
             out.write(u"{0}\t{1}\n".format(src_str, tgt_str).encode("utf-8"))
 
-    def tokens_to_ints(self, tokens, tokmap):
-        ints = []
-        for tok in tokens:
-            if not tok in tokmap:
-                tokmap[tok] = len(tokmap)
-            ints.append(tokmap[tok])
-        return ints
-
     def add_sentence_pair(self, pair):
         src, tgt = pair
-        if self._int_tokens:
-            src = self.tokens_to_ints(pair[0], self._src_tokens)
-            tgt = self.tokens_to_ints(pair[1], self._tgt_tokens)
-        src_sen = Sentence(src)
-        tgt_sen = Sentence(tgt)
-        self._src.append(src_sen)
-        self._tgt.append(tgt_sen)
+        self._src.append(src)
+        self._tgt.append(tgt)
         if self._coocc_caching:
-            for stok in src_sen:
-                for ttok in tgt_sen:
+            for stok in self._src[-1]:
+                for ttok in self._tgt[-1]:
                     try:
-                        self._src_coocc_cache[stok].add(ttok)
+                        self._src_coocc_cache[stok][ttok] += 1
                     except KeyError:
-                        self._src_coocc_cache[stok] = set([ttok])
+                        self._src_coocc_cache[stok] = defaultdict(int)
+                        self._src_coocc_cache[stok][ttok] += 1
+
 
     def ngram_pair_context(self, pair, max_len=None):
         src, tgt = pair
@@ -84,9 +69,6 @@ class BiCorpus:
 
     def remove_ngram_pair(self, pair):
         src, tgt = pair
-        if self._int_tokens:
-            src = tuple(self.convert_tokens_to_int(src, self._src_tokens))
-            tgt = tuple(self.convert_tokens_to_int(tgt, self._tgt_tokens))
         indices = self._src.ngram_index(src) & self._tgt.ngram_index(tgt)
         self._src.remove_ngram(src, indices, self._backup)
         self._tgt.remove_ngram(tgt, indices, self._backup)
@@ -98,25 +80,25 @@ class BiCorpus:
 
         src_len = len(src_index)
         for i, src_tok in enumerate(src_index):
+            # logging
             if i * 100 / src_len < (i + 1) * 100 / src_len:
                 logging.info("{0}0% done.".format(i*10 / src_len))
-            logging.debug(src_tok)
+
             src_occ = src_index[src_tok] 
-            possible_tgts = (self._src_coocc_cache[src_tok] if self._coocc_caching else tgt_index)
+
+            possible_tgts = (dict(sorted(self._src_coocc_cache[src_tok].items(), key=itemgetter(1), reverse=True)[:20]) if self._coocc_caching else tgt_index)
+
+            logging.debug("{0} - {1}".format(src_tok, len(possible_tgts)))
+
             for tgt_tok in possible_tgts:
                 tgt_occ = tgt_index[tgt_tok]
-                coocc = src_occ.intersection(tgt_occ)
-                if len(coocc) >= min_coocc and (max_coocc is None or 
-                                               len(coocc) <= max_coocc):
-                    cont_table = (len(coocc), len(src_occ.difference(tgt_occ)), len(tgt_occ.difference(src_occ)), corp_len - len(src_occ.union(tgt_occ)))
+                if (possible_tgts[tgt_tok] >= min_coocc and
+                    (max_coocc is None or possible_tgts[tgt_tok] <= max_coocc)):
+                    cont_table = (possible_tgts[tgt_tok], len(src_occ.difference(tgt_occ)), len(tgt_occ.difference(src_occ)), corp_len - len(src_occ.union(tgt_occ)))
                     yield (((src_tok,), (tgt_tok,)), cont_table)
 
 
-    @staticmethod
-    def read_from_file(f, caching=True):
-        src_c = Corpus()
-        tgt_c = Corpus()
-        bc = BiCorpus(src_c, tgt_c, caching, int_tokens=True)
+    def read_from_file(self, f):
         gc.disable()
         logging.info("Reading bicorpus started...")
         c = 1
@@ -127,9 +109,16 @@ class BiCorpus:
             if len(l) == 0:
                 continue
             src, tgt = l.decode("utf-8").split("\t")
-            bc.add_sentence_pair((src.split(), tgt.split()))
+            self.add_sentence_pair((src.split(), tgt.split()))
             c += 1
         gc.enable()
         logging.info("Reading bicorpus done.")
+        #from guppy import hpy
+        #h = hpy()
+        #print h.heap()
+        #quit()
 
-        return bc
+    def set_stopwords(self, src, tgt):
+        self._src.set_stopwords(src)
+        self._tgt.set_stopwords(tgt)
+
