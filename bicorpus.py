@@ -16,8 +16,8 @@ class BiCorpus:
 
     def write(self, out):
         for src_sen, tgt_sen in zip(self._src, self._tgt):
-            src_str = " ".join(self._src.ints_to_tokens(src_sen))
-            tgt_str = " ".join(self._tgt.ints_to_tokens(tgt_sen))
+            src_str = " ".join(self._src.ints_to_tokens(src_sen.get_tokens(self._backup)))
+            tgt_str = " ".join(self._tgt.ints_to_tokens(tgt_sen.get_tokens(self._backup)))
             out.write(u"{0}\t{1}\n".format(src_str, tgt_str).encode("utf-8"))
 
     def add_sentence_pair(self, pair):
