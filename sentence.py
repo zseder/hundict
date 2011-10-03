@@ -49,13 +49,28 @@ class Sentence:
 
     def remove_ngram(self, ngram, backup=False):
         positions = self.ngram_positions(ngram)
-        for pos in positions:
+        if backup:
             if backup:
                 self.init_backup()
-
+            # look for position in backup sentence
+            backup_positions = []
+            for pos in positions:
+                backup_pos = 0
+                for i, tok in enumerate(self._backup_sen):
+                    if type(tok) == tuple:
+                        continue
+                    else:
+                        if backup_pos == pos:
+                            backup_positions.append(i)
+                            break
+                        backup_pos += 1
+         
+        for i, pos in enumerate(positions):
+            if backup:
                 for ngram_pos in xrange(len(ngram)):
-                    self._backup_sen[pos+ngram_pos] = (self._backup_sen[pos+ngram_pos],)
-            del self._sen[pos:pos+len(ngram)]
+                    self._backup_sen[backup_positions[i]+ngram_pos] = (self._backup_sen[backup_positions[i]+ngram_pos],)
+            shift = i * len(ngram)
+            del self._sen[pos-shift:pos-shift+len(ngram)]
 
     def remove_toks(self, toks, backup=False):
         if backup:
@@ -64,5 +79,11 @@ class Sentence:
                 if tok in toks:
                     self._backup_sen[i] = (tok,)
         self._sen = filter(lambda x: x not in toks, self._sen)
-               
 
+    def get_tokens(self, backup=False):
+        if backup:
+            self.init_backup()
+            return self._backup_sen
+        else:
+            return self._sen
+    
