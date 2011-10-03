@@ -16,22 +16,27 @@ class BiCorpus:
 
     def write(self, out):
         for src_sen, tgt_sen in zip(self._src, self._tgt):
-            src_str = src_sen.to_str(self._backup)
-            tgt_str = tgt_sen.to_str(self._backup)
+            src_str = " ".join(self._src.ints_to_tokens(src_sen))
+            tgt_str = " ".join(self._tgt.ints_to_tokens(tgt_sen))
             out.write(u"{0}\t{1}\n".format(src_str, tgt_str).encode("utf-8"))
 
     def add_sentence_pair(self, pair):
         src, tgt = pair
         self._src.append(src)
         self._tgt.append(tgt)
+
+        # cache cooccurences
         if self._coocc_caching:
             for stok in self._src[-1]:
+                # create cache if needed
+                try:
+                    self._src_coocc_cache[stok]
+                except KeyError:
+                    self._src_coocc_cache[stok] = defaultdict(int)
+
+                # add tokens to cache
                 for ttok in self._tgt[-1]:
-                    try:
-                        self._src_coocc_cache[stok][ttok] += 1
-                    except KeyError:
-                        self._src_coocc_cache[stok] = defaultdict(int)
-                        self._src_coocc_cache[stok][ttok] += 1
+                    self._src_coocc_cache[stok][ttok] += 1
 
 
     def ngram_pair_context(self, pair, max_len=None):
@@ -82,7 +87,7 @@ class BiCorpus:
         for i, src_tok in enumerate(src_index):
             # logging
             if i * 100 / src_len < (i + 1) * 100 / src_len:
-                logging.info("{0}0% done.".format(i*10 / src_len))
+                logging.info("{0}% done.".format((i+1)*100 / src_len))
 
             src_occ = src_index[src_tok] 
 
