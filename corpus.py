@@ -11,7 +11,7 @@ class Corpus:
 
         self._int_tokens = int_tokens
         if self._int_tokens:
-            self.tokmap = {}
+            self._tokmap = {}
 
     def __len__(self):
         return len(self._corpus)
@@ -100,11 +100,27 @@ class Corpus:
 
         ints = []
         for tok in tokens:
-            if not tok in self.tokmap:
-                self.tokmap[tok] = len(self.tokmap)
-            ints.append(self.tokmap[tok])
+            if not tok in self._tokmap:
+                self._tokmap[tok] = len(self._tokmap)
+            ints.append(self._tokmap[tok])
         return ints
-    
+
+    def ints_to_tokens(self, ints):
+        # first check, if there is a reverse dict
+        if not hasattr(self, "_reverse_tokmap"):
+            self._reverse_tokmap = dict((v,k) for k,v in self._tokmap.items())
+
+        tokens = []
+        for i in ints:
+            # normal tokens
+            if type(i) == int:
+                tokens.append(self._reverse_tokmap[i])
+
+            # removed tokens in backup mode
+            else:
+                tokens.append("[{0}]".format(self._reverse_tokmap[i[0]]))
+        return tokens
+
     def set_stopwords(self, stopwords):
         if len(stopwords) != 0:
             self._stopwords = set(self.tokens_to_ints(list(stopwords)))
