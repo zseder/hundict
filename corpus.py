@@ -118,7 +118,7 @@ class Corpus:
 
             # removed tokens in backup mode
             else:
-                tokens.append("[{0}]".format(self._reverse_tokmap[i[0]]))
+                tokens.append(u"[{0}]".format(self._reverse_tokmap[i[0]]))
         return tokens
 
     def set_stopwords(self, stopwords):
