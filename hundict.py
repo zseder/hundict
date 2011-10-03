@@ -120,7 +120,7 @@ def create_option_parser():
     parser.add_option("-d", "--dict", dest="dict", help="gold dict file")
     parser.add_option("", "--src_stopwords", dest="src_stop", help="src stopwords file")
     parser.add_option("", "--tgt_stopwords", dest="tgt_stop", help="tgt stopwords file")
-    parser.add_option("", "--iters", dest="iters", help="number of iterations")
+    parser.add_option("", "--iter", dest="iters", help="number of iterations")
     parser.add_option("-r", "--remaining", dest="remaining", help="output file for remaining corpus")
     parser.add_option("-l", "--loglevel", dest="loglevel", help="logging level. [DEBUG/INFO/WARNING/ERROR/CRITICAL]")
     return parser
