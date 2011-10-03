@@ -184,9 +184,9 @@ def main():
     db.build(bound, iters=iters)
     for p in db._dict:
         src, tgt = p
-        print u"{0}\t{1}\t{2}".format(" ".join(bc._src.ints_to_tokens(src)),
-                                      " ".join(bc._tgt.ints_to_tokens(tgt)),
-                                      db._dict[p]).encode("utf-8")
+        print u"{0}\t{1}\t{2}".format(db._dict[p],
+                                      " ".join(bc._src.ints_to_tokens(src)),
+                                      " ".join(bc._tgt.ints_to_tokens(tgt)),).encode("utf-8")
 
     if rem is not None:
         bc.write(open(rem, "w")) 
