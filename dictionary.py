@@ -31,14 +31,18 @@ class Dictionary:
         d = Dictionary()
         for l in f:
             l = l.strip().decode("utf-8").split("\t")
-            src = tuple(l[0].split())
-            tgt = tuple(l[1].split())
-            try:
-                score = float(l[2])
-            except IndexError:
-                score = 0.
-            except ValueError:
-                score = 0.
+            if len(l) == 3:
+                try:
+                    score = float(l[0])
+                except IndexError:
+                    score = 0.
+                except ValueError:
+                    score = 0.
+                remaining = l[1:]
+            elif len(l) == 2:
+                remaining = l
+            src = tuple(remaining[0].split())
+            tgt = tuple(remaining[1].split())
             d[(src, tgt)] = score
         return d
 
