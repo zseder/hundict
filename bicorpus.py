@@ -97,9 +97,9 @@ class BiCorpus:
 
             for tgt_tok in possible_tgts:
                 tgt_occ = tgt_index[tgt_tok]
-                if (possible_tgts[tgt_tok] >= min_coocc and
-                    (max_coocc is None or possible_tgts[tgt_tok] <= max_coocc)):
-                    cont_table = (possible_tgts[tgt_tok], len(src_occ.difference(tgt_occ)), len(tgt_occ.difference(src_occ)), corp_len - len(src_occ.union(tgt_occ)))
+                coocc = possible_tgts[tgt_tok]
+                if (coocc >= min_coocc and (max_coocc is None or coocc <= max_coocc)):
+                    cont_table = (coocc, len(src_occ) - coocc, len(tgt_occ) - coocc, corp_len - len(src_occ) - len(tgt_occ) + coocc)
                     yield (((src_tok,), (tgt_tok,)), cont_table)
 
 
