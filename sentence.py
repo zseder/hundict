@@ -50,8 +50,7 @@ class Sentence:
     def remove_ngram(self, ngram, backup=False):
         positions = self.ngram_positions(ngram)
         if backup:
-            if backup:
-                self.init_backup()
+            self.init_backup()
             # look for position in backup sentence
             backup_positions = []
             for pos in positions:
