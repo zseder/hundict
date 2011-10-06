@@ -6,13 +6,14 @@ from operator import itemgetter
 from corpus import Corpus
 
 class BiCorpus:
-    def __init__(self, backup=False, tok_coocc_caching=True, int_tokens=False):
+    def __init__(self, backup=False, tok_coocc_caching=True, int_tokens=False, skip_rare=False):
         self._src = Corpus(backup, int_tokens)
         self._tgt = Corpus(backup, int_tokens)
         self._backup = backup
         self._coocc_caching = tok_coocc_caching
         if self._coocc_caching:
             self._src_coocc_cache = {}
+        self._skip_rare = skip_rare
 
     def write(self, out):
         for sen_i in xrange(len(self._src)):
@@ -37,7 +38,9 @@ class BiCorpus:
 
                 # add tokens to cache
                 for ttok in self._tgt[-1]:
-                    if (ttok in self._src_coocc_cache[stok][0] or
+                    if (not self._skip_rare or
+                        ttok in self._src_coocc_cache[stok][0] or
+                        len(self._src_coocc_cache[stok][0]) <= 20 or
                         self._src_coocc_cache[stok][1] <= 10):
                         self._src_coocc_cache[stok][0][ttok] += 1
                         if self._src_coocc_cache[stok][0][ttok] > self._src_coocc_cache[stok][1]:
