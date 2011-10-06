@@ -15,7 +15,8 @@ class BiCorpus:
             self._src_coocc_cache = {}
 
     def write(self, out):
-        for src_sen, tgt_sen in zip(self._src, self._tgt):
+        for sen_i in xrange(len(self._src)):
+            src_sen, tgt_sen = self._src[sen_i], self._tgt[sen_i]
             src_str = " ".join(self._src.ints_to_tokens(src_sen.get_tokens(self._backup)))
             tgt_str = " ".join(self._tgt.ints_to_tokens(tgt_sen.get_tokens(self._backup)))
             out.write(u"{0}\t{1}\n".format(src_str, tgt_str).encode("utf-8"))
@@ -32,12 +33,15 @@ class BiCorpus:
                 try:
                     self._src_coocc_cache[stok]
                 except KeyError:
-                    self._src_coocc_cache[stok] = defaultdict(int)
+                    self._src_coocc_cache[stok] = (defaultdict(int), 0)
 
                 # add tokens to cache
                 for ttok in self._tgt[-1]:
-                    self._src_coocc_cache[stok][ttok] += 1
-
+                    if (ttok in self._src_coocc_cache[stok][0] or
+                        self._src_coocc_cache[stok][1] <= 10):
+                        self._src_coocc_cache[stok][0][ttok] += 1
+                        if self._src_coocc_cache[stok][0][ttok] > self._src_coocc_cache[stok][1]:
+                            self._src_coocc_cache[stok] = (self._src_coocc_cache[stok][0],self._src_coocc_cache[stok][0][ttok])
 
     def ngram_pair_context(self, pair, max_len=None):
         src, tgt = pair
@@ -91,7 +95,7 @@ class BiCorpus:
 
             src_occ = src_index[src_tok] 
 
-            possible_tgts = (dict(sorted(self._src_coocc_cache[src_tok].items(), key=itemgetter(1), reverse=True)[:20]) if self._coocc_caching else tgt_index)
+            possible_tgts = (dict(sorted(self._src_coocc_cache[src_tok][0].items(), key=itemgetter(1), reverse=True)[:20]) if self._coocc_caching else tgt_index)
 
             logging.debug("{0} - {1}".format(src_tok, len(possible_tgts)))
 
