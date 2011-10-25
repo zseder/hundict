@@ -87,8 +87,9 @@ class DictBuilder:
             # remove pairs that are found to be good and yield them
             for result in mutual_pairs:
                 pair, score = result
-                self._bicorpus.remove_ngram_pair(pair)
                 self._dict[pair] = score
+
+            self._bicorpus.remove_ngram_pairs([k[0] for k in mutual_pairs])
             
             logging.info("done at {0}".format(time.asctime()))
 
@@ -123,7 +124,6 @@ def create_option_parser():
     parser.add_option("", "--iter", dest="iters", help="number of iterations")
     parser.add_option("-r", "--remaining", dest="remaining", help="output file for remaining corpus")
     parser.add_option("-l", "--loglevel", dest="loglevel", help="logging level. [DEBUG/INFO/WARNING/ERROR/CRITICAL]")
-    parser.add_option("", "--skip-rare", dest="skip_rare", help="when collecting cooccurences, skip those targets, who cooccur first but other targets with same source word has been cooccured much more.")
     return parser
 
 def parse_options(parser):
@@ -163,25 +163,26 @@ def parse_options(parser):
             print "Not a logging level. See(k) help."
             sys.exit(-1)
 
-    skip_rare = (True if options.skip_rare else False)
-
-    return input_file, bound, scorer, iters, src_stopwords, tgt_stopwords, gold, rem, skip_rare
+    return input_file, bound, scorer, iters, src_stopwords, tgt_stopwords, gold, rem
 
 def main():
     optparser = create_option_parser()
-    input_file, bound, _scorer, iters, srcstop, tgtstop, gold, rem, skip_rare = parse_options(optparser)
+    input_file, bound, _scorer, iters, srcstop, tgtstop, gold, rem = parse_options(optparser)
     scorer = getattr(DictBuilder, _scorer)
 
     backup = rem is not None
 
-    bc = BiCorpus(backup=backup, int_tokens=True, skip_rare=skip_rare)
+    bc = BiCorpus(backup=backup, int_tokens=True, only_counts=True)
 
     bc.set_stopwords(srcstop, tgtstop)
 
     bc.read_from_file(file(input_file))
+
+    #import pickle
+    #pickle.dump(bc, open("hunglish.bicorpus.pickle", "w"))
+    #quit()
     
-    for pair in gold:
-        bc.remove_ngram_pair(pair)
+    bc.remove_ngram_pairs(gold)
 
     db = DictBuilder(bc, scorer)
 
