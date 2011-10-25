@@ -123,7 +123,10 @@ class Corpus:
 
     def set_stopwords(self, stopwords):
         if len(stopwords) != 0:
-            self._stopwords = set(self.tokens_to_ints(list(stopwords)))
+            if self._int_tokens:
+                self._stopwords = set(self.tokens_to_ints(list(stopwords)))
+            else:
+                self._stopwords = set(stopwords)
 
     def clean_multiple_hapax_sentences(self):
         # TODO implement if needed
