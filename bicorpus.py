@@ -1,19 +1,17 @@
 import logging
 import gc
 from collections import defaultdict
-from operator import itemgetter
 
 from corpus import Corpus
+from coocc_cache import CooccCache
 
 class BiCorpus:
-    def __init__(self, backup=False, tok_coocc_caching=True, int_tokens=False, skip_rare=False):
+    def __init__(self, backup=False, int_tokens=False, only_counts=True):
         self._src = Corpus(backup, int_tokens)
         self._tgt = Corpus(backup, int_tokens)
         self._backup = backup
-        self._coocc_caching = tok_coocc_caching
-        if self._coocc_caching:
-            self._src_coocc_cache = {}
-        self._skip_rare = skip_rare
+        self._only_counts = only_counts
+        self._coocc_cache = CooccCache(self._only_counts)
 
     def write(self, out):
         for sen_i in xrange(len(self._src)):
@@ -26,25 +24,8 @@ class BiCorpus:
         src, tgt = pair
         self._src.append(src)
         self._tgt.append(tgt)
-
-        # cache cooccurences
-        if self._coocc_caching:
-            for stok in self._src[-1]:
-                # create cache if needed
-                try:
-                    self._src_coocc_cache[stok]
-                except KeyError:
-                    self._src_coocc_cache[stok] = (defaultdict(int), 0)
-
-                # add tokens to cache
-                for ttok in self._tgt[-1]:
-                    if (not self._skip_rare or
-                        ttok in self._src_coocc_cache[stok][0] or
-                        len(self._src_coocc_cache[stok][0]) <= 20 or
-                        self._src_coocc_cache[stok][1] <= 10):
-                        self._src_coocc_cache[stok][0][ttok] += 1
-                        if self._src_coocc_cache[stok][0][ttok] > self._src_coocc_cache[stok][1]:
-                            self._src_coocc_cache[stok] = (self._src_coocc_cache[stok][0],self._src_coocc_cache[stok][0][ttok])
+        i = len(self._src) - 1
+        self._coocc_cache.add_sentence_pair((self._src[i], self._tgt[i]), i)
 
     def ngram_pair_context(self, pair, max_len=None):
         src, tgt = pair
@@ -79,16 +60,61 @@ class BiCorpus:
         
         return context
 
-    def remove_ngram_pair(self, pair):
-        src, tgt = pair
-        indices = self._src.ngram_index(src) & self._tgt.ngram_index(tgt)
-        self._src.remove_ngram(src, indices, self._backup)
-        self._tgt.remove_ngram(tgt, indices, self._backup)
+    #def remove_ngram_pair(self, pair):
+        #src, tgt = pair
+        #indices = self._src.ngram_index(src) & self._tgt.ngram_index(tgt)
+        #self._src.remove_ngram(src, indices, self._backup)
+        #self._tgt.remove_ngram(tgt, indices, self._backup)
+        #for src_tok in src:
+            #for tgt_tok in tgt:
+                #self._coocc_cache.remove_pair(
+                    #(self._src.tokens_to_ints([src_tok])[0],
+                     #self._tgt.tokens_to_ints([tgt_tok])[0]),
+                    #indices)
+
+    def remove_ngram_pairs(self, pairs):
+        """
+        this method removes ngram pairs from corpora
+        input is a list because if it were only a pair,
+        indices can get corrupted
+        cause:
+          - while they are ngrams, ngram occurences have to be removed
+            from cache, not all per token
+          - if one token is removed, but has to be removed from the same
+            sentence because of another index, it cannot be done
+        """
+        src_ngram_to_remove = defaultdict(set)
+        tgt_ngram_to_remove = defaultdict(set)
+        coocc_cache_to_remove = {}
+        for pair in pairs:
+            src, tgt = pair
+            indices = self._src.ngram_index(src) & self._tgt.ngram_index(tgt)
+            if len(indices) > 0:
+                src_ngram_to_remove[src] |= indices
+                tgt_ngram_to_remove[tgt] |= indices
+                coocc_cache_to_remove[pair] = indices
+
+        for ngram in src_ngram_to_remove:
+            indices = src_ngram_to_remove[ngram]
+            self._src.remove_ngram(ngram, indices, self._backup)
+
+        for ngram in tgt_ngram_to_remove:
+            indices = tgt_ngram_to_remove[ngram]
+            self._tgt.remove_ngram(ngram, indices, self._backup)
+
+        for pair in coocc_cache_to_remove:
+            src, tgt = pair
+            indices = coocc_cache_to_remove[pair]
+            for src_tok in self._src.tokens_to_ints(src):
+                for tgt_tok in self._tgt.tokens_to_ints(tgt):
+                    self._coocc_cache.remove_pair((src_tok, tgt_tok), indices)
 
     def generate_unigram_pairs(self, min_coocc=1, max_coocc=None):
         src_index = self._src._index
         tgt_index = self._tgt._index
         corp_len = len(self._src)
+        
+        self._coocc_cache.filter()
 
         src_len = len(src_index)
         for i, src_tok in enumerate(src_index):
@@ -98,13 +124,13 @@ class BiCorpus:
 
             src_occ = src_index[src_tok] 
 
-            possible_tgts = (dict(sorted(self._src_coocc_cache[src_tok][0].items(), key=itemgetter(1), reverse=True)[:20]) if self._coocc_caching else tgt_index)
+            possible_tgts = self._coocc_cache.possible_pairs(src_tok)
 
-            logging.debug("{0} - {1}".format(src_tok, len(possible_tgts)))
+            logging.debug(u"{0} - {1}".format(src_tok, len(possible_tgts)).encode("utf-8"))
 
             for tgt_tok in possible_tgts:
                 tgt_occ = tgt_index[tgt_tok]
-                coocc = possible_tgts[tgt_tok]
+                coocc = self._coocc_cache.coocc_count((src_tok, tgt_tok))
                 if (coocc >= min_coocc and (max_coocc is None or coocc <= max_coocc)):
                     cont_table = (coocc, len(src_occ) - coocc, len(tgt_occ) - coocc, corp_len - len(src_occ) - len(tgt_occ) + coocc)
                     yield (((src_tok,), (tgt_tok,)), cont_table)
@@ -121,6 +147,11 @@ class BiCorpus:
             if len(l) == 0:
                 continue
             src, tgt = l.decode("utf-8").split("\t")
+            
+            #if no-token sentence -> skip it
+            if len(src) == 0 or len(tgt) == 0:
+                continue
+
             self.add_sentence_pair((src.split(), tgt.split()))
             c += 1
         gc.enable()
