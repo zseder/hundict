@@ -90,9 +90,14 @@ class BiCorpus:
         for ngram in tgt_ngram_to_remove:
             indices = tgt_ngram_to_remove[ngram]
             self._tgt.remove_ngram(ngram, indices, self._backup)
-        
-        # build up coocc_cache again. faster than maintaining it
+        gc.enable() 
+
+        self.create_coocc_cache()
+        logging.info("Removing pairs done.")
+
+    def create_coocc_cache(self):
         logging.info("Building up coocc cache")
+        gc.disable()
         self._coocc_cache = CooccCache()
         for i in xrange(len(self._src)):
             src_sen = self._src[i]
@@ -101,16 +106,33 @@ class BiCorpus:
         logging.info("cache built")
         self._coocc_cache.filter()
         gc.enable()
-        logging.info("Removing pairs done.")
+
+    def get_low_strdiff_pairs(self):
+        logging.info("String difference phase started")
+        src_index = self._src._index
+        tgt_index = self._tgt._index
+        for src in self._coocc_cache._cache:
+            src_tok = self._src.ints_to_tokens([src])[0].lower()
+            for tgt in self._coocc_cache.possible_pairs(src):
+                tgt_tok = self._tgt.ints_to_tokens([tgt])[0].lower()
+                ratio = float(len(src_index[src])) / len(tgt_index[tgt])
+                if ratio > 3 or ratio < 1/3.0:
+                    continue
+
+                #idiff = levenshtein(src_tok, tgt_tok)
+                #sdiff = levenshtein(src_tok, tgt_tok, 1)
+                #if idiff == 0:
+                if src_tok == tgt_tok:
+                    yield ((src,), (tgt,))
+                    logging.debug("{0} added".format(repr((src_tok, tgt_tok))))
+                    break
+        logging.info("String difference phase done")
 
     def generate_unigram_pairs(self, min_coocc=1, max_coocc=None):
         src_index = self._src._index
         tgt_index = self._tgt._index
         corp_len = len(self._src)
-        
-        self._coocc_cache.filter()
         gc.disable()
-
         src_len = len(src_index)
         for i, src_tok in enumerate(src_index):
             # logging
