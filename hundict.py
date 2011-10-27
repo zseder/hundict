@@ -76,7 +76,7 @@ class DictBuilder:
             scored_pairs = ((pair[0], self.score(pair[1]) )for pair in unigram_pairs)
 
             goods = (((pair[0], pair[1]), score) for pair, score in scored_pairs if score >= bound)
-            mutual_pairs = self.filter_mutual_pairs(goods)
+            mutual_pairs = list(self.filter_mutual_pairs(goods))
 
             # extend unigrams to ngrams
 
@@ -88,10 +88,9 @@ class DictBuilder:
             for result in mutual_pairs:
                 pair, score = result
                 self._dict[pair] = score
-
             self._bicorpus.remove_ngram_pairs([k[0] for k in mutual_pairs])
             
-            logging.info("done at {0}".format(time.asctime()))
+            logging.info("iteration finished.")
 
     def score(self, cont_table):
         try:
@@ -139,7 +138,7 @@ def parse_options(parser):
         iters = int(options.iters)
 
     # stopwords
-    punct = set([".", "!", "?", ",", "-", ":", "'", "...", "--", ";", "(", ")"])
+    punct = set([".", "!", "?", ",", "-", ":", "'", "...", "--", ";", "(", ")", "\""])
     src_stopwords = set()
     if options.src_stop:
         src_stopwords = set(file(options.src_stop).read().decode("utf-8").rstrip("\n").split("\n")) | punct
@@ -172,7 +171,7 @@ def main():
 
     backup = rem is not None
 
-    bc = BiCorpus(backup=backup, int_tokens=True, only_counts=True)
+    bc = BiCorpus(backup=backup, int_tokens=True)
 
     bc.set_stopwords(srcstop, tgtstop)
 
