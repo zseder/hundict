@@ -1,4 +1,6 @@
+import gc
 from collections import defaultdict
+import logging
 
 from sentence import Sentence
 
@@ -108,7 +110,11 @@ class Corpus:
     def ints_to_tokens(self, ints):
         # first check, if there is a reverse dict
         if not hasattr(self, "_reverse_tokmap"):
-            self._reverse_tokmap = dict((v,k) for k,v in self._tokmap.items())
+            logging.info("Creating reverse tokmap for corpus...")
+            gc.disable()
+            self._reverse_tokmap = dict((v,k) for k,v in self._tokmap.iteritems())
+            gc.enable()
+            logging.info("Creating reverse tokmap for corpus done")
 
         tokens = []
         for i in ints:
