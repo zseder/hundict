@@ -6,12 +6,11 @@ from corpus import Corpus
 from coocc_cache import CooccCache
 
 class BiCorpus:
-    def __init__(self, backup=False, int_tokens=False, only_counts=True):
+    def __init__(self, backup=False, int_tokens=False):
         self._src = Corpus(backup, int_tokens)
         self._tgt = Corpus(backup, int_tokens)
         self._backup = backup
-        self._only_counts = only_counts
-        self._coocc_cache = CooccCache(self._only_counts)
+        self._coocc_cache = CooccCache()
 
     def write(self, out):
         for sen_i in xrange(len(self._src)):
@@ -60,18 +59,6 @@ class BiCorpus:
         
         return context
 
-    #def remove_ngram_pair(self, pair):
-        #src, tgt = pair
-        #indices = self._src.ngram_index(src) & self._tgt.ngram_index(tgt)
-        #self._src.remove_ngram(src, indices, self._backup)
-        #self._tgt.remove_ngram(tgt, indices, self._backup)
-        #for src_tok in src:
-            #for tgt_tok in tgt:
-                #self._coocc_cache.remove_pair(
-                    #(self._src.tokens_to_ints([src_tok])[0],
-                     #self._tgt.tokens_to_ints([tgt_tok])[0]),
-                    #indices)
-
     def remove_ngram_pairs(self, pairs):
         """
         this method removes ngram pairs from corpora
@@ -83,16 +70,18 @@ class BiCorpus:
           - if one token is removed, but has to be removed from the same
             sentence because of another index, it cannot be done
         """
+        if len(pairs) == 0:
+            return
+        logging.info("Removing found pairs")
+        gc.disable()
         src_ngram_to_remove = defaultdict(set)
         tgt_ngram_to_remove = defaultdict(set)
-        coocc_cache_to_remove = {}
         for pair in pairs:
             src, tgt = pair
             indices = self._src.ngram_index(src) & self._tgt.ngram_index(tgt)
             if len(indices) > 0:
                 src_ngram_to_remove[src] |= indices
                 tgt_ngram_to_remove[tgt] |= indices
-                coocc_cache_to_remove[pair] = indices
 
         for ngram in src_ngram_to_remove:
             indices = src_ngram_to_remove[ngram]
@@ -101,13 +90,18 @@ class BiCorpus:
         for ngram in tgt_ngram_to_remove:
             indices = tgt_ngram_to_remove[ngram]
             self._tgt.remove_ngram(ngram, indices, self._backup)
-
-        for pair in coocc_cache_to_remove:
-            src, tgt = pair
-            indices = coocc_cache_to_remove[pair]
-            for src_tok in self._src.tokens_to_ints(src):
-                for tgt_tok in self._tgt.tokens_to_ints(tgt):
-                    self._coocc_cache.remove_pair((src_tok, tgt_tok), indices)
+        
+        # build up coocc_cache again. faster than maintaining it
+        logging.info("Building up coocc cache")
+        self._coocc_cache = CooccCache()
+        for i in xrange(len(self._src)):
+            src_sen = self._src[i]
+            tgt_sen = self._tgt[i]
+            self._coocc_cache.add_sentence_pair((src_sen, tgt_sen), i)
+        logging.info("cache built")
+        self._coocc_cache.filter()
+        gc.enable()
+        logging.info("Removing pairs done.")
 
     def generate_unigram_pairs(self, min_coocc=1, max_coocc=None):
         src_index = self._src._index
@@ -115,6 +109,7 @@ class BiCorpus:
         corp_len = len(self._src)
         
         self._coocc_cache.filter()
+        gc.disable()
 
         src_len = len(src_index)
         for i, src_tok in enumerate(src_index):
@@ -134,6 +129,7 @@ class BiCorpus:
                 if (coocc >= min_coocc and (max_coocc is None or coocc <= max_coocc)):
                     cont_table = (coocc, len(src_occ) - coocc, len(tgt_occ) - coocc, corp_len - len(src_occ) - len(tgt_occ) + coocc)
                     yield (((src_tok,), (tgt_tok,)), cont_table)
+        gc.enable()
 
 
     def read_from_file(self, f):
