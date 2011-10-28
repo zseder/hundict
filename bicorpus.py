@@ -129,12 +129,12 @@ class BiCorpus:
 
                 idiff = levenshtein(src_tok, tgt_tok)
                 #sdiff = levenshtein(src_tok, tgt_tok, 1)
-                if len(src_tok) >= 5:
+                if len(src_tok) >= 5 and len(tgt_tok) >= 5:
                     if idiff == 1:
                         logging.debug("{0} = {1} added".format(repr((src_tok, tgt_tok)), idiff))
                         yield ((src,), (tgt,)), 0.8
                         break
-                if len(src_tok) >= 7:
+                if len(src_tok) >= 7 and len(tgt_tok) >= 7 and abs(len(tgt_tok) - len(src_tok)) <= 1:
                     if idiff == 2:
                         logging.debug("{0} = {1} added".format(repr((src_tok, tgt_tok)), idiff))
                         yield ((src,), (tgt,)), 0.6
