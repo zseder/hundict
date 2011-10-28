@@ -2,6 +2,8 @@ import logging
 import gc
 from collections import defaultdict
 
+from langtools.utils.stringdiff import levenshtein
+
 from corpus import Corpus
 from coocc_cache import CooccCache
 
@@ -119,13 +121,26 @@ class BiCorpus:
                 if ratio > 3 or ratio < 1/3.0:
                     continue
 
-                #idiff = levenshtein(src_tok, tgt_tok)
-                #sdiff = levenshtein(src_tok, tgt_tok, 1)
                 #if idiff == 0:
                 if src_tok == tgt_tok:
-                    yield ((src,), (tgt,))
+                    yield ((src,), (tgt,)), 1.0
                     logging.debug("{0} added".format(repr((src_tok, tgt_tok))))
                     break
+
+                idiff = levenshtein(src_tok, tgt_tok)
+                #sdiff = levenshtein(src_tok, tgt_tok, 1)
+                if len(src_tok) >= 5:
+                    if idiff == 1:
+                        logging.debug("{0} = {1} added".format(repr((src_tok, tgt_tok)), idiff))
+                        yield ((src,), (tgt,)), 0.8
+                        break
+                if len(src_tok) >= 7:
+                    if idiff == 2:
+                        logging.debug("{0} = {1} added".format(repr((src_tok, tgt_tok)), idiff))
+                        yield ((src,), (tgt,)), 0.6
+                        break
+
+
         logging.info("String difference phase done")
 
     def generate_unigram_pairs(self, min_coocc=1, max_coocc=None):
