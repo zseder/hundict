@@ -68,8 +68,8 @@ class DictBuilder:
         # searching for low strdiff pairs first
         good_pairs = list(self._bicorpus.get_low_strdiff_pairs())
         for p in good_pairs:
-            self._dict[p] = 1
-        self._bicorpus.remove_ngram_pairs(good_pairs)
+            self._dict[p[0]] = p[1]
+        self._bicorpus.remove_ngram_pairs([p[0] for p in good_pairs])
 
         for _iter in xrange(iters):
             logging.info("{0}.iteration started at {1}".format(_iter, time.asctime()))
