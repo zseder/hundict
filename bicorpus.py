@@ -1,6 +1,7 @@
 import logging
 import gc
 from collections import defaultdict
+from itertools import chain
 
 from langtools.utils.stringdiff import levenshtein
 
@@ -140,7 +141,6 @@ class BiCorpus:
                         yield ((src,), (tgt,)), 0.6
                         break
 
-
         logging.info("String difference phase done")
 
     def generate_unigram_pairs(self, min_coocc=1, max_coocc=None):
@@ -168,6 +168,30 @@ class BiCorpus:
                     yield (((src_tok,), (tgt_tok,)), cont_table)
         gc.enable()
 
+    def generate_ngram_pairs(self, previous_ngram_pairs, min_coocc=1):
+        for pair in previous_ngram_pairs:
+            (src, tgt), _ = pair
+            src_occ = self._src.ngram_index(src)
+            tgt_occ = self._tgt.ngram_index(tgt)
+            ngram_indices = src_occ & tgt_occ
+            
+            src_neighbours = self._src.ngram_neighbours(src, ngram_indices)
+            tgt_neighbours = self._tgt.ngram_neighbours(tgt, ngram_indices)
+            
+            for (new_src, new_tgt), coocc_c, src_changed in chain([((longer, tgt), count, 1) for longer, count in src_neighbours],
+                                          [((src, longer), count, 0) for longer, count in tgt_neighbours]):
+                if src_changed:
+                    new_src_s = self._src.ngram_index(new_src)
+                    new_tgt_s = tgt_occ
+                else:
+                    new_src_s = src_occ
+                    new_tgt_s = self._tgt.ngram_index(new_tgt)
+                only_new_src_c = len(new_src_s) - coocc_c
+                only_new_tgt_c = len(new_tgt_s) - coocc_c
+
+                others_c = len(self._src) - len(new_src_s | new_tgt_s)
+                cont_table = (coocc_c, only_new_src_c, only_new_tgt_c, others_c)
+                yield((new_src, tgt), cont_table)
 
     def read_from_file(self, f):
         gc.disable()
@@ -189,10 +213,6 @@ class BiCorpus:
             c += 1
         gc.enable()
         logging.info("Reading bicorpus done.")
-        #from guppy import hpy
-        #h = hpy()
-        #print h.heap()
-        #quit()
 
     def set_stopwords(self, src, tgt):
         self._src.set_stopwords(src)
