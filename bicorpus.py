@@ -1,7 +1,6 @@
 import logging
 import gc
 from collections import defaultdict
-from itertools import chain
 
 from langtools.utils.stringdiff import levenshtein
 
@@ -177,9 +176,16 @@ class BiCorpus:
             
             src_neighbours = self._src.ngram_neighbours(src, ngram_indices)
             tgt_neighbours = self._tgt.ngram_neighbours(tgt, ngram_indices)
+            all_new_ngram_pairs = []
+            for (neighbour, direction), count in src_neighbours:
+                new_src_ngram = (src + (neighbour,) if direction == 1 else (neighbour,) + src)
+                all_new_ngram_pairs.append(((new_src_ngram, tgt), count, True))
+            for (neighbour, direction), count in tgt_neighbours:
+                new_tgt_ngram = (tgt + (neighbour,) if direction == 1 else (neighbour,) + tgt)
+                all_new_ngram_pairs.append(((src, new_tgt_ngram), count, False))
             
-            for (new_src, new_tgt), coocc_c, src_changed in chain([((longer, tgt), count, 1) for longer, count in src_neighbours],
-                                          [((src, longer), count, 0) for longer, count in tgt_neighbours]):
+            results_for_pair = [(src, tgt)]
+            for (new_src, new_tgt), coocc_c, src_changed in all_new_ngram_pairs:
                 if src_changed:
                     new_src_s = self._src.ngram_index(new_src)
                     new_tgt_s = tgt_occ
@@ -191,7 +197,8 @@ class BiCorpus:
 
                 others_c = len(self._src) - len(new_src_s | new_tgt_s)
                 cont_table = (coocc_c, only_new_src_c, only_new_tgt_c, others_c)
-                yield((new_src, tgt), cont_table)
+                results_for_pair.append(((new_src, new_tgt), cont_table))
+            yield results_for_pair
 
     def read_from_file(self, f):
         gc.disable()
