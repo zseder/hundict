@@ -62,6 +62,87 @@ class DictBuilder:
             except KeyError, e:
                 raise e
 
+    def extend_with_ngrams(self, orig_pairs, scale=1.0):
+        def __ngram_pair_parents(ngram_pair):
+           parents = []
+           src, tgt = ngram_pair
+           if len(src) > 1:
+               parents.append((src[1:], tgt))
+               parents.append((src[:-1], tgt))
+           if len(tgt) > 1:
+               parents.append((src, tgt[1:]))
+               parents.append((src, tgt[:-1]))
+           return parents
+        
+        logging.info("Extending dictionary with ngrams started.")
+        to_process = dict(orig_pairs)
+        final = {}
+        while True:
+            # if there is no more to process -> stop
+            if len(to_process) == 0:
+                break
+            
+            to_process_new = {}
+            # extend pair with possible ngrams
+            for results_for_pair in self._bicorpus.generate_ngram_pairs(to_process.iteritems()):
+                parent = results_for_pair[0]
+                old_score = to_process[parent]
+                logging.debug("Parent: {0}: {1}".format(str((self._bicorpus._src.ints_to_tokens(parent[0]), self._bicorpus._tgt.ints_to_tokens(parent[1]))), old_score))
+                best_for_parent = None
+                best_score = old_score * scale
+                for new_pair, table in results_for_pair[1:]:
+                    new_score = self.score(table)
+                    logging.debug("Child: {0}: {1}, {2}".format(str((self._bicorpus._src.ints_to_tokens(new_pair[0]), self._bicorpus._tgt.ints_to_tokens(new_pair[1]))), new_score, str(table)))
+                    if new_score > best_score:
+                        best_for_parent = new_pair
+                        best_score = new_score
+
+                if best_for_parent is not None:
+                    logging.debug("Best child is {0}".format(str((self._bicorpus._src.ints_to_tokens(best_for_parent[0]), self._bicorpus._tgt.ints_to_tokens(best_for_parent[1])))))
+                    to_process_new[best_for_parent] = best_score
+                    for possible_parent in __ngram_pair_parents(best_for_parent):
+                        if possible_parent in final:
+                            del final[possible_parent]
+                            logging.debug("Another parent: {0} is removed.".format(str((self._bicorpus._src.ints_to_tokens(best_for_parent[0]), self._bicorpus._tgt.ints_to_tokens(best_for_parent[1])))))
+                else:
+                    final[parent] = old_score
+
+            # clean @final in every iteration
+            for pair in final.keys():
+                # maybe it's already deleted
+                if pair not in final:
+                    continue
+
+                possible_parents = __ngram_pair_parents(pair)
+                is_better_parent = False
+                for pp in possible_parents:
+                    if pp in final and final[pp] > final[pair] * scale:
+                        is_better_parent = True
+                        break
+
+                if is_better_parent:
+                    logging.debug("Child: {0} is removed, because better parent is in final".format(str((self._bicorpus._src.ints_to_tokens(pair[0]), self._bicorpus._tgt.ints_to_tokens(pair[1])))))
+                    del final[pair]
+                    continue
+                else:
+
+                    for possible_parent in possible_parents:
+                        if possible_parent in final:
+                            if final[pair] > final[possible_parent]:
+                                logging.debug("Parent: {0} is removed, because child {1} is in final".format(str((self._bicorpus._src.ints_to_tokens(best_for_parent[0]), self._bicorpus._tgt.ints_to_tokens(best_for_parent[1]))),str((self._bicorpus._src.ints_to_tokens(pair[0]), self._bicorpus._tgt.ints_to_tokens(pair[1])))))
+                                del final[possible_parent]
+                            else:
+                                raise Exception("Better parents should have been removed before")
+
+            to_process = to_process_new
+
+            # this is test code, i hope, this intersection will be always empty
+            for k in set(final.keys()) & set(to_process.keys()):
+                logging.debug(str(k) + " already in final, skipping redundant calculation")
+                del to_process[k]
+        logging.info("Extending dictionary with ngrams finished.")
+        return final
+        
     def build(self, bound, iters):
         logging.info("Building dictionary started...")
 
@@ -77,7 +158,9 @@ class DictBuilder:
             # Cleaning corpus from sentences that contain >=2 hapaxes
 
             # get all possible unigram pairs
-            unigram_pairs = self._bicorpus.generate_unigram_pairs()
+            unigram_pairs = list(self._bicorpus.generate_unigram_pairs())
+            for pair, table in unigram_pairs:
+                logging.debug("{0}: {1}".format(str((self._bicorpus._src.ints_to_tokens(pair[0]), self._bicorpus._tgt.ints_to_tokens(pair[1]))), str(table)))
 
             # count score
             scored_pairs = ((pair[0], self.score(pair[1]) )for pair in unigram_pairs)
@@ -86,14 +169,15 @@ class DictBuilder:
             mutual_pairs = list(self.filter_mutual_pairs(goods))
 
             # extend unigrams to ngrams
+            new_ngram_pairs = self.extend_with_ngrams(mutual_pairs)
 
             # get context of candidates
 
             # filter results by a sparse checker
 
             # remove pairs that are found to be good and yield them
-            for result in mutual_pairs:
-                pair, score = result
+            for pair in new_ngram_pairs:
+                score = new_ngram_pairs[pair]
                 self._dict[pair] = score
             self._bicorpus.remove_ngram_pairs([k[0] for k in mutual_pairs])
             
