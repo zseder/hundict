@@ -80,7 +80,7 @@ class Corpus:
                 valid_occ.add(sen_i)
         return valid_occ
 
-    def ngram_neighbours(self, ngram, top_n=20, indices=None):
+    def ngram_neighbours(self, ngram, indices=None, top_n=20):
         if indices is None:
             indices = self.ngram_index(ngram)
         if self._int_tokens:
@@ -94,7 +94,7 @@ class Corpus:
                     neighbours[(sen[pos - 1], -1)] += 1
                 if pos + len(ngram) < len(sen):
                     neighbours[(sen[pos + len(ngram)], 1)] += 1
-        return sorted(neighbours.items(), key=lambda x: x[1], reverse=True)[:top_n]
+        return sorted(filter(lambda x: x[1] > 1, neighbours.items()), key=lambda x: x[1], reverse=True)[:top_n]
 
     def remove_ngram(self, ngram, ind=None, backup=False):
         ngram = self.tokens_to_ints(ngram)
