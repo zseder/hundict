@@ -145,7 +145,6 @@ class BiCorpus:
     def generate_unigram_pairs(self, min_coocc=1, max_coocc=None):
         src_index = self._src._index
         tgt_index = self._tgt._index
-        corp_len = len(self._src)
         gc.disable()
         src_len = len(src_index)
         for i, src_tok in enumerate(src_index):
@@ -163,7 +162,7 @@ class BiCorpus:
                 tgt_occ = tgt_index[tgt_tok]
                 coocc = self._coocc_cache.coocc_count((src_tok, tgt_tok))
                 if (coocc >= min_coocc and (max_coocc is None or coocc <= max_coocc)):
-                    cont_table = (coocc, len(src_occ) - coocc, len(tgt_occ) - coocc, corp_len - len(src_occ) - len(tgt_occ) + coocc)
+                    cont_table = self.contingency_table(None, src_occ_s=src_occ, tgt_occ_s=tgt_occ, coocc_c=coocc)
                     yield (((src_tok,), (tgt_tok,)), cont_table)
         gc.enable()
 
@@ -185,20 +184,36 @@ class BiCorpus:
                 all_new_ngram_pairs.append(((src, new_tgt_ngram), count, False))
             
             results_for_pair = [(src, tgt)]
-            for (new_src, new_tgt), coocc_c, src_changed in all_new_ngram_pairs:
+            for pair, coocc_c, src_changed in all_new_ngram_pairs:
+                new_src, new_tgt = pair
                 if src_changed:
-                    new_src_s = self._src.ngram_index(new_src)
-                    new_tgt_s = tgt_occ
+                    cont_table = self.contingency_table(pair, tgt_occ_s=tgt_occ)
                 else:
-                    new_src_s = src_occ
-                    new_tgt_s = self._tgt.ngram_index(new_tgt)
-                only_new_src_c = len(new_src_s) - coocc_c
-                only_new_tgt_c = len(new_tgt_s) - coocc_c
-
-                others_c = len(self._src) - len(new_src_s | new_tgt_s)
-                cont_table = (coocc_c, only_new_src_c, only_new_tgt_c, others_c)
+                    cont_table = self.contingency_table(pair, src_occ_s=src_occ)
                 results_for_pair.append(((new_src, new_tgt), cont_table))
             yield results_for_pair
+
+    def contingency_table(self, ngram_pair, **kwargs):
+        """
+        counts contingency table for a given ngram pair
+        all four values of the table can be given independently to
+        the method not to be counted twice
+        """
+        if ngram_pair is not None:
+            src, tgt = ngram_pair
+        src_occ_s = (kwargs["src_occ_s"] if "src_occ_s" in kwargs else self._src.ngram_index(src))
+        tgt_occ_s = (kwargs["tgt_occ_s"] if "tgt_occ_s" in kwargs else self._tgt.ngram_index(tgt))
+        
+        coocc_c = (kwargs["coocc_c"] if "coocc_c" in kwargs else len((kwargs["coocc_s"] if "coocc_s" in kwargs else src_occ_s & tgt_occ_s)))
+
+        src_occ_c = len(src_occ_s)
+        tgt_occ_c = len(tgt_occ_s)
+        only_src_c = src_occ_c - coocc_c
+        only_tgt_c = tgt_occ_c - coocc_c
+
+        others_c = (kwargs["others_c"] if "others_c" in kwargs else len(self._src) - len(src_occ_s | tgt_occ_s))
+
+        return (coocc_c, only_src_c, only_tgt_c, others_c)
 
     def read_from_file(self, f):
         gc.disable()
