@@ -166,22 +166,32 @@ class BiCorpus:
                     yield (((src_tok,), (tgt_tok,)), cont_table)
         gc.enable()
 
+    def ngram_pair_neighbours(self, pair, ngram_indices=None, max_len=4):
+        src, tgt = pair
+        if ngram_indices is None:
+            src_occ = self._src.ngram_index(src)
+            tgt_occ = self._tgt.ngram_index(tgt)
+            ngram_indices = src_occ & tgt_occ
+        src_neighbours = self._src.ngram_neighbours(src, ngram_indices)
+        tgt_neighbours = self._tgt.ngram_neighbours(tgt, ngram_indices)
+        all_new_ngram_pairs = []
+        if len(src) < max_len:
+            for (neighbour, direction), count in src_neighbours:
+                new_src_ngram = (src + (neighbour,) if direction == 1 else (neighbour,) + src)
+                all_new_ngram_pairs.append(((new_src_ngram, tgt), count, True))
+        if len(tgt) < max_len:
+            for (neighbour, direction), count in tgt_neighbours:
+                new_tgt_ngram = (tgt + (neighbour,) if direction == 1 else (neighbour,) + tgt)
+                all_new_ngram_pairs.append(((src, new_tgt_ngram), count, False))
+        return all_new_ngram_pairs
+
     def generate_ngram_pairs(self, previous_ngram_pairs, min_coocc=1):
         for pair in previous_ngram_pairs:
             (src, tgt), _ = pair
             src_occ = self._src.ngram_index(src)
             tgt_occ = self._tgt.ngram_index(tgt)
             ngram_indices = src_occ & tgt_occ
-            
-            src_neighbours = self._src.ngram_neighbours(src, ngram_indices)
-            tgt_neighbours = self._tgt.ngram_neighbours(tgt, ngram_indices)
-            all_new_ngram_pairs = []
-            for (neighbour, direction), count in src_neighbours:
-                new_src_ngram = (src + (neighbour,) if direction == 1 else (neighbour,) + src)
-                all_new_ngram_pairs.append(((new_src_ngram, tgt), count, True))
-            for (neighbour, direction), count in tgt_neighbours:
-                new_tgt_ngram = (tgt + (neighbour,) if direction == 1 else (neighbour,) + tgt)
-                all_new_ngram_pairs.append(((src, new_tgt_ngram), count, False))
+            all_new_ngram_pairs = self.ngram_pair_neighbours(pair, ngram_indices)
             
             results_for_pair = [(src, tgt)]
             for pair, coocc_c, src_changed in all_new_ngram_pairs:
@@ -211,7 +221,7 @@ class BiCorpus:
         only_src_c = src_occ_c - coocc_c
         only_tgt_c = tgt_occ_c - coocc_c
 
-        others_c = (kwargs["others_c"] if "others_c" in kwargs else len(self._src) - len(src_occ_s | tgt_occ_s))
+        others_c = (kwargs["others_c"] if "others_c" in kwargs else len(self._src) - only_src_c - only_tgt_c - coocc_c)
 
         return (coocc_c, only_src_c, only_tgt_c, others_c)
 
