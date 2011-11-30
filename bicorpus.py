@@ -1,6 +1,7 @@
 import logging
 import gc
 from collections import defaultdict
+from itertools import combinations
 
 from langtools.utils.stringdiff import levenshtein
 
@@ -143,27 +144,38 @@ class BiCorpus:
         logging.info("String difference phase done")
 
     def generate_unigram_pairs(self, min_coocc=1, max_coocc=None):
+        for result in self.generate_unigram_set_pairs(min_coocc, max_coocc, 1):
+            (src_ngram_set, tgt_ngram_set), cont_table = result
+            src_ngram = src_ngram_set.pop()
+            tgt_ngram = tgt_ngram_set.pop()
+            yield ((src_ngram, tgt_ngram), cont_table)
+
+    def generate_unigram_set_pairs(self, min_coocc=1, max_coocc=None, max_len=3):
         src_index = self._src._index
         tgt_index = self._tgt._index
         gc.disable()
         src_len = len(src_index)
         for i, src_tok in enumerate(src_index):
-            # logging
             if i * 100 / src_len < (i + 1) * 100 / src_len:
                 logging.info("{0}% done.".format((i+1)*100 / src_len))
 
             src_occ = src_index[src_tok] 
 
-            possible_tgts = self._coocc_cache.possible_pairs(src_tok)
+            possible_tgts = self._coocc_cache.possible_pairs(src_tok, with_count=True)
+            sorted_possible_tgts = sorted(possible_tgts.items(), key=lambda x: x[1], reverse=True)
 
-            logging.debug(u"{0} - {1}".format(src_tok, len(possible_tgts)).encode("utf-8"))
-
-            for tgt_tok in possible_tgts:
-                tgt_occ = tgt_index[tgt_tok]
-                coocc = self._coocc_cache.coocc_count((src_tok, tgt_tok))
-                if (coocc >= min_coocc and (max_coocc is None or coocc <= max_coocc)):
-                    cont_table = self.contingency_table(None, src_occ_s=src_occ, tgt_occ_s=tgt_occ, coocc_c=coocc)
-                    yield (((src_tok,), (tgt_tok,)), cont_table)
+            for subset_len in xrange(1, max_len + 1):
+                for tgt_toks in combinations(sorted_possible_tgts, subset_len):
+                    if subset_len > 1:
+                        tgt_occ = reduce(lambda x, y: tgt_index[x[0]] | tgt_index[y[0]], tgt_toks)
+                    else:
+                        tgt_occ = tgt_index[tgt_toks[0][0]]
+                    coocc = len(src_occ & tgt_occ)
+                    if (coocc >= min_coocc and (max_coocc is None or coocc <= max_coocc)):
+                        cont_table = self.contingency_table(None, src_occ_s=src_occ, tgt_occ_s=tgt_occ, coocc_c=coocc)
+                        yield ((set([(src_tok,)]), set([(tgt_tok[0],) for tgt_tok in tgt_toks])), cont_table)
+                    else:
+                        break
         gc.enable()
 
     def ngram_pair_neighbours(self, pair, ngram_indices=None, max_len=4):
