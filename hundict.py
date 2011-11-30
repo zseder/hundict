@@ -62,7 +62,7 @@ class DictBuilder:
             except KeyError, e:
                 raise e
 
-    def extend_pair_with_ngrams(self, orig_pair, orig_score, ratio=0.9):
+    def extend_pair_with_ngrams(self, orig_pair, orig_score, ratio=0.97):
         to_process = set([(orig_pair, orig_score)])
         final = []
         max_score = orig_score
@@ -88,16 +88,16 @@ class DictBuilder:
             for child in children:
                 child_pair, _, src_changed = child
                 if src_changed:
-                    table = self._bicorpus.contingency_table(actual_pair, tgt_occ_s=tgt_occ)
+                    table = self._bicorpus.contingency_table(child_pair, tgt_occ_s=tgt_occ)
                 else:
-                    table = self._bicorpus.contingency_table(actual_pair, src_occ_s=src_occ)
+                    table = self._bicorpus.contingency_table(child_pair, src_occ_s=src_occ)
                 child_score = self.score(table)
                 if child_score / max_score > ratio:
                     to_process.add((child_pair, child_score))
                 max_score = max(max_score, child_score)
             final.append((actual_pair, actual_score))
             done.add(actual_pair)
-
+        
         if final[-1][1] / orig_score <= 1.0 / ratio:
             return None
 
@@ -125,7 +125,6 @@ class DictBuilder:
         new_pairs = {}
         orig_pairs = dict(pairs)
         for pair in orig_pairs.iterkeys():
-            print self._bicorpus._src.ints_to_tokens(pair[0]), self._bicorpus._tgt.ints_to_tokens(pair[1])
             if pair in to_delete:
                 continue
 
@@ -135,22 +134,25 @@ class DictBuilder:
                 continue
             else:
                 better_pair, better_score = better
-                print self._bicorpus._src.ints_to_tokens(better_pair[0]), self._bicorpus._tgt.ints_to_tokens(better_pair[1]), better_score
+                #print self._bicorpus._src.ints_to_tokens(better_pair[0]), self._bicorpus._tgt.ints_to_tokens(better_pair[1]), better_score
+
+                # check if it is a trivial pair
+                if (len(better_pair[0]) == len(better_pair[1]) and
+                    reduce(lambda x,y: x and y, ((((x,),(y,)) in orig_pairs) for x,y in zip(better_pair[0], better_pair[1])))):
+                    continue
+
+                # if there is a better parent, keep that and throw new child away,
+                # if there isnt, keep new child and remove worse parents
                 is_better_parent = False
                 parents = __ngram_pair_parents(pair)
                 for parent in parents:
                     if parent in orig_pairs:
                         if orig_pairs[parent] > better_score:
                             is_better_parent = True
-                            print "There is a better parent: ", parent, orig_pairs[parent]
                             break
                 if not is_better_parent:
                     new_pairs[better_pair] = better_score
                     to_delete |= set(parents)
-                    print "No better parents, so i remove these:"
-                    for p in parents:
-                        print self._bicorpus._src.ints_to_tokens(p[0]), self._bicorpus._tgt.ints_to_tokens(p[1])
-                    print "Remove done"
 
         for p in to_delete:
             if p in orig_pairs:
