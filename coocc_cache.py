@@ -18,8 +18,11 @@ class CooccCache:
             for ttok in tgt_sen:
                 self._cache[stok][ttok].add(index)
 
-    def possible_pairs(self, src_word):
-        return self._cache[src_word].keys()
+    def possible_pairs(self, src_word, with_count=False):
+        if with_count:
+            return self._cache[src_word]
+        else:
+            return self._cache[src_word].keys()
 
     def coocc_count(self, pair):
         src, tgt = pair
