@@ -203,8 +203,39 @@ class DictBuilder:
                 score = new_ngram_pairs[pair]
                 self._dict[pair] = score
             self._bicorpus.remove_ngram_pairs([k[0] for k in mutual_pairs])
+
             
             logging.info("iteration finished.")
+
+        # searching for unigram set pairs
+        # following line is a bit complex but beautiful so explanation:
+        # iterate through generate_unigram_set_pairs() results as (src, results)
+        # create a list of tuples with (src, something) tuples where "something"  is coming from iterating
+        # through results, scoring them with self.score(), filtering with "bound" and
+        # as a final step, sorting them and using only the best score
+        good_set_pairs = ((k,v) for k,v in ((tuple(src), sorted(((_tgt, score) for _tgt, score in ((tuple(tgt), self.score(table)) for tgt, table in results) if score >= bound), key=lambda x: x[1], reverse=True)) for src, results in self._bicorpus.generate_unigram_set_pairs()) if len(v) >= 1)
+        #good_set_pairs = ((k,v) for k,v in ((tuple(src), ((_tgt, score) for _tgt, score in ((tuple(tgt), table) for tgt, table in results) if score >= bound)) for src, results in self._bicorpus.generate_unigram_set_pairs()) if len(v) >= 1)
+
+        #for src, results in self._bicorpus.generate_unigram_set_pairs():
+            #for tgt, table in results:
+                #print table,
+                #for src_ in src:
+                    #print self._bicorpus._src.ints_to_tokens(src_),
+                #for tgt_ in tgt:
+                    #print self._bicorpus._tgt.ints_to_tokens(tgt_),
+                #print
+        #quit()
+
+        for src, scores in good_set_pairs:
+            for tgt, score in scores:
+                print score,
+                for src_ in src:
+                    print self._bicorpus._src.ints_to_tokens(src_),
+                for tgt_ in tgt:
+                    print self._bicorpus._tgt.ints_to_tokens(tgt_),
+                print
+                break
+        quit()
 
     def score(self, cont_table):
         try:
