@@ -145,10 +145,12 @@ class BiCorpus:
 
     def generate_unigram_pairs(self, min_coocc=1, max_coocc=None):
         for result in self.generate_unigram_set_pairs(min_coocc, max_coocc, 1):
-            (src_ngram_set, tgt_ngram_set), cont_table = result
+            src_ngram_set, results_for_src = result
             src_ngram = src_ngram_set.pop()
-            tgt_ngram = tgt_ngram_set.pop()
-            yield ((src_ngram, tgt_ngram), cont_table)
+            for result_for_src in results_for_src:
+                tgt_ngram_set, cont_table = result_for_src
+                tgt_ngram = tgt_ngram_set.pop()
+                yield ((src_ngram, tgt_ngram), cont_table)
 
     def generate_unigram_set_pairs(self, min_coocc=1, max_coocc=None, max_len=3):
         src_index = self._src._index
@@ -161,21 +163,39 @@ class BiCorpus:
 
             src_occ = src_index[src_tok] 
 
-            possible_tgts = self._coocc_cache.possible_pairs(src_tok, with_count=True)
-            sorted_possible_tgts = sorted(possible_tgts.items(), key=lambda x: x[1], reverse=True)
+            possible_tgts = [x for x in self._coocc_cache.possible_pairs(src_tok, with_count=True).iteritems() if len(x[1]) > 1]
+            sum_ = sum((len(x[1]) for x in possible_tgts))
+            sorted_possible_tgts = sorted((x for x in possible_tgts if len(x) >= sum_ / 10), key=lambda x: len(x[1]), reverse=True)[:max_len+2]
 
+            results = []
             for subset_len in xrange(1, max_len + 1):
                 for tgt_toks in combinations(sorted_possible_tgts, subset_len):
                     if subset_len > 1:
-                        tgt_occ = reduce(lambda x, y: tgt_index[x[0]] | tgt_index[y[0]], tgt_toks)
+                        
+                        # creating union of sets
+                        tgt_occ = set()
+                        # check if there are at least two independent occurences
+                        # of every token
+                        gain_for_every_word = True
+                        for tgt_tok, tgt_set in tgt_toks:
+                            prev_len = len(tgt_occ)
+                            tgt_occ |= tgt_set
+                            if len(tgt_occ) - prev_len <= 1:
+                                gain_for_every_word = False
+                                break
+                        if not gain_for_every_word:
+                            break
+
+                        tgt_occ = reduce(lambda x, y: (x[0] | tgt_index[y[0]], None), tgt_toks, (set(), None))[0]
                     else:
                         tgt_occ = tgt_index[tgt_toks[0][0]]
                     coocc = len(src_occ & tgt_occ)
                     if (coocc >= min_coocc and (max_coocc is None or coocc <= max_coocc)):
                         cont_table = self.contingency_table(None, src_occ_s=src_occ, tgt_occ_s=tgt_occ, coocc_c=coocc)
-                        yield ((set([(src_tok,)]), set([(tgt_tok[0],) for tgt_tok in tgt_toks])), cont_table)
+                        results.append( (set([(tgt_tok[0],) for tgt_tok in tgt_toks]), cont_table) )
                     else:
                         break
+            yield set([(src_tok,)]), results
         gc.enable()
 
     def ngram_pair_neighbours(self, pair, ngram_indices=None, max_len=4):
