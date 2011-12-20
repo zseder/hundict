@@ -124,8 +124,8 @@ class BiCorpus:
 
                 #if idiff == 0:
                 if src_tok == tgt_tok:
-                    yield ((src,), (tgt,)), 1.0
                     logging.debug("{0} added".format(repr((src_tok, tgt_tok))))
+                    yield ((src,), (tgt,)), 1.0
                     break
 
                 idiff = levenshtein(src_tok, tgt_tok)
