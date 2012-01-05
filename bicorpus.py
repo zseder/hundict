@@ -6,14 +6,12 @@ from itertools import combinations
 from langtools.utils.stringdiff import levenshtein
 
 from corpus import Corpus
-from coocc_cache import CooccCache
 
 class BiCorpus:
     def __init__(self, backup=False, int_tokens=False):
         self._src = Corpus(backup, int_tokens)
         self._tgt = Corpus(backup, int_tokens)
         self._backup = backup
-        self._coocc_cache = CooccCache()
 
     def write(self, out):
         for sen_i in xrange(len(self._src)):
@@ -26,8 +24,51 @@ class BiCorpus:
         src, tgt = pair
         self._src.append(src)
         self._tgt.append(tgt)
-        i = len(self._src) - 1
-        self._coocc_cache.add_sentence_pair((self._src[i], self._tgt[i]), i)
+
+    def create_cache(self):
+        if hasattr(self, "_coocc_cache"):
+            del self._coocc_cache
+        if hasattr(self, "interesting"):
+            del self.interesting
+        self._coocc_cache = defaultdict(int)
+        self.interesting = defaultdict(dict)
+
+    def build_cache(self):
+        logging.info("Buildind cache...")
+        self.create_cache()
+        for sen_i in xrange(len(self._src)):
+            self.add_sentence_pair_to_cache(self._src[sen_i], self._tgt[sen_i])
+        self.filter_interesting_pairs()
+        logging.info("Buildind cache done")
+
+    def add_sentence_pair_to_cache(self, src, tgt):
+        for src_tok in src:
+            for tgt_tok in tgt:
+                try:
+                    self.interesting[src_tok][tgt_tok] += 1
+                except KeyError:
+                    self.interesting[src_tok][tgt_tok] = 1
+                continue
+                if (src_tok in self.interesting and
+                    tgt_tok in self.interesting[src_tok]):
+                    self.interesting[src_tok][tgt_tok] += 1
+                else:
+                    self._coocc_cache[(src_tok, tgt_tok)] += 1
+                    if self._coocc_cache[(src_tok, tgt_tok)] == 20:
+                        self.interesting[src_tok][tgt_tok] = 20
+                        del self._coocc_cache[(src_tok, tgt_tok)]
+
+    def filter_interesting_pairs(self, max_per_word=10):
+        logging.info("Filtering interesting pairs...")
+        
+        # there's no need for coocc cache in this phase. (should have deleted
+        # earlier?)
+        if hasattr(self, "_coocc_cache"):
+            del self._coocc_cache
+
+        for src in self.interesting:
+            self.interesting[src] = dict(sorted(self.interesting[src].iteritems(), key=lambda x: x[1], reverse=True)[:max_per_word])
+        logging.info("Filtering interesting pairs done")
 
     def ngram_pair_context(self, pair, max_len=None):
         src, tgt = pair
@@ -86,6 +127,14 @@ class BiCorpus:
                 src_ngram_to_remove[src] |= indices
                 tgt_ngram_to_remove[tgt] |= indices
 
+            # remove all occurences from @interesting cache
+            for src_tok in src:
+                for tgt_tok in tgt:
+                    try:
+                        self.interesting[src_tok][tgt_tok] -= len(indices)
+                    except KeyError:
+                        pass
+
         for ngram in src_ngram_to_remove:
             indices = src_ngram_to_remove[ngram]
             self._src.remove_ngram(ngram, indices, self._backup)
@@ -95,28 +144,15 @@ class BiCorpus:
             self._tgt.remove_ngram(ngram, indices, self._backup)
         gc.enable() 
 
-        self.create_coocc_cache()
         logging.info("Removing pairs done.")
-
-    def create_coocc_cache(self):
-        logging.info("Building up coocc cache")
-        gc.disable()
-        self._coocc_cache = CooccCache()
-        for i in xrange(len(self._src)):
-            src_sen = self._src[i]
-            tgt_sen = self._tgt[i]
-            self._coocc_cache.add_sentence_pair((src_sen, tgt_sen), i)
-        logging.info("cache built")
-        self._coocc_cache.filter()
-        gc.enable()
 
     def get_low_strdiff_pairs(self):
         logging.info("String difference phase started")
         src_index = self._src._index
         tgt_index = self._tgt._index
-        for src in self._coocc_cache._cache:
+        for src in self.interesting:
             src_tok = self._src.ints_to_tokens([src])[0].lower()
-            for tgt in self._coocc_cache.possible_pairs(src):
+            for tgt, _ in self.interesting[src].iteritems():
                 tgt_tok = self._tgt.ints_to_tokens([tgt])[0].lower()
                 ratio = float(len(src_index[src])) / len(tgt_index[tgt])
                 if ratio > 3 or ratio < 1/3.0:
@@ -163,30 +199,30 @@ class BiCorpus:
 
             src_occ = src_index[src_tok] 
 
-            possible_tgts = [x for x in self._coocc_cache.possible_pairs(src_tok, with_count=True).iteritems() if len(x[1]) > 1]
-            sum_ = sum((len(x[1]) for x in possible_tgts))
-            sorted_possible_tgts = sorted((x for x in possible_tgts if len(x) >= sum_ / 10), key=lambda x: len(x[1]), reverse=True)[:max_len+2]
+            possible_tgts = self.interesting[src_tok].items()
+            sum_ = sum((x[1] for x in possible_tgts))
+            sorted_possible_tgts = sorted((x for x in possible_tgts if x[1] >= sum_ / 10), key=lambda x: x[1], reverse=True)[:max_len+2]
 
             results = []
             for subset_len in xrange(1, max_len + 1):
                 for tgt_toks in combinations(sorted_possible_tgts, subset_len):
+                    tgt_occ = set()
                     if subset_len > 1:
                         
                         # creating union of sets
-                        tgt_occ = set()
                         # check if there are at least two independent occurences
                         # of every token
                         gain_for_every_word = True
-                        for tgt_tok, tgt_set in tgt_toks:
+                        for tgt_tok, _ in tgt_toks:
+                            tgt_set = tgt_index[tgt_tok]
                             prev_len = len(tgt_occ)
                             tgt_occ |= tgt_set
                             if len(tgt_occ) - prev_len <= 1:
                                 gain_for_every_word = False
                                 break
                         if not gain_for_every_word:
-                            break
+                            continue
 
-                        tgt_occ = reduce(lambda x, y: (x[0] | tgt_index[y[0]], None), tgt_toks, (set(), None))[0]
                     else:
                         tgt_occ = tgt_index[tgt_toks[0][0]]
                     coocc = len(src_occ & tgt_occ)
@@ -275,6 +311,8 @@ class BiCorpus:
 
             self.add_sentence_pair((src.split(), tgt.split()))
             c += 1
+        self.build_cache()
+        self.filter_interesting_pairs()
         gc.enable()
         logging.info("Reading bicorpus done.")
 
