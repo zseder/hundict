@@ -177,7 +177,7 @@ class DictBuilder:
         self._bicorpus.remove_ngram_pairs([p for p in self._dict])
 
         for _iter in xrange(iters):
-            logging.info("{0}.iteration started at {1}".format(_iter, time.asctime()))
+            logging.info("{0}.iteration started".format(_iter))
 
             # Cleaning corpus from sentences that contain >=2 hapaxes
 
@@ -208,23 +208,22 @@ class DictBuilder:
             logging.info("iteration finished.")
 
         # searching for unigram set pairs
-        # following line is a bit complex but beautiful so explanation:
-        # iterate through generate_unigram_set_pairs() results as (src, results)
-        # create a list of tuples with (src, something) tuples where "something"  is coming from iterating
-        # through results, scoring them with self.score(), filtering with "bound" and
-        # as a final step, sorting them and using only the best score
-        good_set_pairs = ((k,v) for k,v in ((tuple(src), sorted(((_tgt, score) for _tgt, score in ((tuple(tgt), self.score(table)) for tgt, table in results) if score >= bound), key=lambda x: x[1], reverse=True)) for src, results in self._bicorpus.generate_unigram_set_pairs()) if len(v) >= 1)
-        #good_set_pairs = ((k,v) for k,v in ((tuple(src), ((_tgt, score) for _tgt, score in ((tuple(tgt), table) for tgt, table in results) if score >= bound)) for src, results in self._bicorpus.generate_unigram_set_pairs()) if len(v) >= 1)
-
-        #for src, results in self._bicorpus.generate_unigram_set_pairs():
-            #for tgt, table in results:
-                #print table,
-                #for src_ in src:
-                    #print self._bicorpus._src.ints_to_tokens(src_),
-                #for tgt_ in tgt:
-                    #print self._bicorpus._tgt.ints_to_tokens(tgt_),
-                #print
-        #quit()
+        good_set_pairs = []
+        for src, results in self._bicorpus.generate_unigram_set_pairs():
+            scores = []
+            #collect only good scores
+            for tgt, table in results:
+                _tgt = tuple(tgt)
+                score = self.score(table)
+                if score < bound:
+                    continue
+                scores.append((_tgt, score))
+            
+            if len(scores) > 0:
+                # sort scores and append
+                scores.sort(key=lambda x: x[1], reverse=True)
+                for k, v in scores:
+                    good_set_pairs.append((k, v))
 
         for src, scores in good_set_pairs:
             for tgt, score in scores:
@@ -235,7 +234,6 @@ class DictBuilder:
                     print self._bicorpus._tgt.ints_to_tokens(tgt_),
                 print
                 break
-        quit()
 
     def score(self, cont_table):
         try:
@@ -321,6 +319,20 @@ def main():
     bc.set_stopwords(srcstop, tgtstop)
 
     bc.read_from_file(file(input_file))
+
+    #from pympler.asizeof import asizeof
+    #print asizeof(bc._src)
+    #print asizeof(bc._tgt)
+    #print asizeof(bc.interesting)
+    #print asizeof(bc._coocc_cache)
+    #bc.filter_interesting_pairs()
+    #print asizeof(bc.interesting)
+    #from pympler import muppy
+    #all_objects = muppy.get_objects()
+    #from pympler import summary
+    #sum1 = summary.summarize(all_objects)
+    #summary.print_(sum1)
+    #quit()
 
     #import pickle
     #pickle.dump(bc, open("hunglish.bicorpus.pickle", "w"))
