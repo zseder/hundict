@@ -222,8 +222,7 @@ class DictBuilder:
             if len(scores) > 0:
                 # sort scores and append
                 scores.sort(key=lambda x: x[1], reverse=True)
-                for k, v in scores:
-                    good_set_pairs.append((k, v))
+                good_set_pairs.append((src, scores))
 
         for src, scores in good_set_pairs:
             for tgt, score in scores:
@@ -282,12 +281,12 @@ def parse_options(parser):
 
     # stopwords
     punct = set([".", "!", "?", ",", "-", ":", "'", "...", "--", ";", "(", ")", "\""])
-    src_stopwords = set()
+    src_stopwords = set(punct)
     if options.src_stop:
-        src_stopwords = set(file(options.src_stop).read().decode("utf-8").rstrip("\n").split("\n")) | punct
-    tgt_stopwords = set()
+        src_stopwords = set(file(options.src_stop).read().decode("utf-8").rstrip("\n").split("\n"))
+    tgt_stopwords = set(punct)
     if options.tgt_stop:
-        tgt_stopwords = set(file(options.tgt_stop).read().decode("utf-8").rstrip("\n").split("\n")) | punct
+        tgt_stopwords = set(file(options.tgt_stop).read().decode("utf-8").rstrip("\n").split("\n"))
 
     # gold dict
     gold = Dictionary()
