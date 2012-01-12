@@ -124,7 +124,11 @@ class DictBuilder:
         to_delete = set()
         new_pairs = {}
         orig_pairs = dict(pairs)
+        status = 0
         for pair in orig_pairs.iterkeys():
+            if status * 100 / len(orig_pairs) > (status + 1) * 100 / len(orig_pairs):
+                logging.debug("{0}% done".format(status * 100 / len(orig_pairs)))
+            status += 1
             if pair in to_delete:
                 continue
 
@@ -177,6 +181,8 @@ class DictBuilder:
         self._bicorpus.remove_ngram_pairs([p for p in self._dict])
 
         for _iter in xrange(iters):
+            bound *= 2.0
+        for _iter in xrange(iters):
             logging.info("{0}.iteration started".format(_iter))
 
             # Cleaning corpus from sentences that contain >=2 hapaxes
@@ -191,6 +197,7 @@ class DictBuilder:
             mutual_pairs = list(self.filter_mutual_pairs(goods))
 
             # extend unigrams to ngrams
+            logging.info("{0} unigram pairs found at bound {1}".format(len(mutual_pairs), bound))
             new_ngram_pairs = self.extend_with_ngrams(mutual_pairs)
             #new_ngram_pairs = mutual_pairs
 
@@ -203,36 +210,39 @@ class DictBuilder:
                 score = new_ngram_pairs[pair]
                 self._dict[pair] = score
             self._bicorpus.remove_ngram_pairs([k[0] for k in mutual_pairs])
-
             
+            self._bicorpus.build_cache()
+
+            # searching for unigram set pairs
+            good_set_pairs = []
+            for src, results in self._bicorpus.generate_unigram_set_pairs(min_len=2, max_len=4):
+                scores = []
+                #collect only good scores
+                for tgt, table in results:
+                    _tgt = tuple(tgt)
+                    score = self.score(table)
+                    if score < bound:
+                        continue
+                    scores.append((_tgt, score))
+                
+                if len(scores) > 0:
+                    #sort scores and append
+                    scores.sort(key=lambda x: x[1], reverse=True)
+                    good_set_pairs.append((src, scores))
+            logging.info("{0} unigram pairs found at bound {1}".format(len(good_set_pairs), bound))
+            
+
+            for src, scores in good_set_pairs:
+                for tgt, score in scores:
+                    self._dict[(src.pop(), tgt, True)] = score
+                    # keep now only the best
+                    break
+            self._bicorpus.remove_ngram_pairs([(src_, tgt_) for src, scores in good_set_pairs for tgt, _ in scores for src_ in src for tgt_ in tgt])
+
+            self._bicorpus.build_cache()
+
+            bound /= 2.0
             logging.info("iteration finished.")
-
-        # searching for unigram set pairs
-        good_set_pairs = []
-        for src, results in self._bicorpus.generate_unigram_set_pairs():
-            scores = []
-            #collect only good scores
-            for tgt, table in results:
-                _tgt = tuple(tgt)
-                score = self.score(table)
-                if score < bound:
-                    continue
-                scores.append((_tgt, score))
-            
-            if len(scores) > 0:
-                # sort scores and append
-                scores.sort(key=lambda x: x[1], reverse=True)
-                good_set_pairs.append((src, scores))
-
-        for src, scores in good_set_pairs:
-            for tgt, score in scores:
-                print score,
-                for src_ in src:
-                    print self._bicorpus._src.ints_to_tokens(src_),
-                for tgt_ in tgt:
-                    print self._bicorpus._tgt.ints_to_tokens(tgt_),
-                print
-                break
 
     def score(self, cont_table):
         try:
@@ -245,8 +255,10 @@ class DictBuilder:
         a,b,c,d = cont_table
         if weighted:
             return float(a) /(a+b+c+d) * log(float(a)*(a+b+c+d)/((a+b)*(a+c)),2)
+            #return float(a) / 1. * log(float(a)*(a+b+c+d)/((a+b)*(a+c)),2)
         else:
             return 1. /(a+b+c+d) * log(float(a)*(a+b+c+d)/((a+b)*(a+c)),2)
+            #return 1. / 1. * log(float(a)*(a+b+c+d)/((a+b)*(a+c)),2)
 
     @staticmethod
     def wmi(cont_table):
@@ -283,10 +295,10 @@ def parse_options(parser):
     punct = set([".", "!", "?", ",", "-", ":", "'", "...", "--", ";", "(", ")", "\""])
     src_stopwords = set(punct)
     if options.src_stop:
-        src_stopwords = set(file(options.src_stop).read().decode("utf-8").rstrip("\n").split("\n"))
+        src_stopwords |= set(file(options.src_stop).read().decode("utf-8").rstrip("\n").split("\n"))
     tgt_stopwords = set(punct)
     if options.tgt_stop:
-        tgt_stopwords = set(file(options.tgt_stop).read().decode("utf-8").rstrip("\n").split("\n"))
+        tgt_stopwords |= set(file(options.tgt_stop).read().decode("utf-8").rstrip("\n").split("\n"))
 
     # gold dict
     gold = Dictionary()
@@ -343,15 +355,21 @@ def main():
 
     db.build(bound, iters=iters)
     for p in db._dict:
-        src, tgt = p
-        print u"{0}\t{1}\t{2}".format(db._dict[p],
+        if len(p) == 2:
+            src, tgt = p
+            print u"{0}\t{1}\t{2}".format(db._dict[p],
                                       " ".join(bc._src.ints_to_tokens(src)),
                                       " ".join(bc._tgt.ints_to_tokens(tgt)),).encode("utf-8")
-
+        elif len(p) == 3:
+            src, tgt, _ = p
+            for tgt_tok in tgt:
+                print u"{0}\t{1}\t{2}".format(db._dict[p],
+                                      " ".join(bc._src.ints_to_tokens(src)),
+                                      " ".join(bc._tgt.ints_to_tokens(tgt_tok)),).encode("utf-8")
     if rem is not None:
         bc.write(open(rem, "w")) 
 
 if __name__ == "__main__":
-    import cProfile
+    #import cProfile
     #cProfile.run("main()")
     main()
