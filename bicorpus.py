@@ -37,6 +37,8 @@ class BiCorpus:
         logging.info("Buildind cache...")
         self.create_cache()
         for sen_i in xrange(len(self._src)):
+            if sen_i * 100 / len(self._src) > (sen_i - 1) * 100 / len(self._src):
+                logging.debug("{0}% done".format(sen_i * 100/len(self._src)))
             self.add_sentence_pair_to_cache(self._src[sen_i], self._tgt[sen_i])
         self.filter_interesting_pairs()
         logging.info("Buildind cache done")
@@ -48,20 +50,11 @@ class BiCorpus:
                     self.interesting[src_tok][tgt_tok] += 1
                 except KeyError:
                     self.interesting[src_tok][tgt_tok] = 1
-                continue
-                if (src_tok in self.interesting and
-                    tgt_tok in self.interesting[src_tok]):
-                    self.interesting[src_tok][tgt_tok] += 1
-                else:
-                    self._coocc_cache[(src_tok, tgt_tok)] += 1
-                    if self._coocc_cache[(src_tok, tgt_tok)] == 20:
-                        self.interesting[src_tok][tgt_tok] = 20
-                        del self._coocc_cache[(src_tok, tgt_tok)]
 
     def filter_interesting_pairs(self, max_per_word=10):
         logging.info("Filtering interesting pairs...")
         
-        # there's no need for coocc cache in this phase. (should have deleted
+        # there's no need for coocc cache in this phase. (should have been deleted
         # earlier?)
         if hasattr(self, "_coocc_cache"):
             del self._coocc_cache
@@ -180,7 +173,7 @@ class BiCorpus:
         logging.info("String difference phase done")
 
     def generate_unigram_pairs(self, min_coocc=1, max_coocc=None):
-        for result in self.generate_unigram_set_pairs(min_coocc, max_coocc, 1):
+        for result in self.generate_unigram_set_pairs(min_coocc, max_coocc, max_len=1):
             src_ngram_set, results_for_src = result
             src_ngram = src_ngram_set.pop()
             for result_for_src in results_for_src:
@@ -188,7 +181,7 @@ class BiCorpus:
                 tgt_ngram = tgt_ngram_set.pop()
                 yield ((src_ngram, tgt_ngram), cont_table)
 
-    def generate_unigram_set_pairs(self, min_coocc=1, max_coocc=None, max_len=3):
+    def generate_unigram_set_pairs(self, min_coocc=1, max_coocc=None, min_len=1, max_len=3):
         src_index = self._src._index
         tgt_index = self._tgt._index
         gc.disable()
@@ -204,7 +197,7 @@ class BiCorpus:
             sorted_possible_tgts = sorted((x for x in possible_tgts if x[1] >= sum_ / 10), key=lambda x: x[1], reverse=True)[:max_len+2]
 
             results = []
-            for subset_len in xrange(1, max_len + 1):
+            for subset_len in xrange(min_len, max_len + 1):
                 for tgt_toks in combinations(sorted_possible_tgts, subset_len):
                     tgt_occ = set()
                     if subset_len > 1:
@@ -312,7 +305,6 @@ class BiCorpus:
             self.add_sentence_pair((src.split(), tgt.split()))
             c += 1
         self.build_cache()
-        self.filter_interesting_pairs()
         gc.enable()
         logging.info("Reading bicorpus done.")
 
