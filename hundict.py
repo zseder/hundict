@@ -126,7 +126,7 @@ class DictBuilder:
         status = 0
         for pair in orig_pairs.iterkeys():
             if status * 100 / len(orig_pairs) > (status + 1) * 100 / len(orig_pairs):
-                logging.debug("{0}% done".format(status * 100 / len(orig_pairs)))
+                logging.info("{0}% done".format(status * 100 / len(orig_pairs)))
             status += 1
             if pair in to_delete:
                 continue
@@ -211,32 +211,37 @@ class DictBuilder:
             self._bicorpus.remove_ngram_pairs([k[0] for k in mutual_pairs])
             
             self._bicorpus.build_cache()
-
+            
             # searching for unigram set pairs
+            logging.info("Searching for unigram set pairs...")
             good_set_pairs = []
-            for src, results in self._bicorpus.generate_unigram_set_pairs(min_len=2, max_len=4):
+            for results in self._bicorpus.generate_unigram_set_pairs(min_len=2, max_len=4):
                 scores = []
                 #collect only good scores
-                for tgt, table in results:
-                    _tgt = tuple(tgt)
+                for src, tgt, table in results:
                     score = self.score(table)
-                    if score < bound:
+                    if score < 10 * bound:
                         continue
-                    scores.append((_tgt, score))
+                    scores.append((src, tgt, score))
                 
                 if len(scores) > 0:
                     #sort scores and append
                     scores.sort(key=lambda x: x[1], reverse=True)
-                    good_set_pairs.append((src, scores))
-            logging.info("{0} unigram pairs found at bound {1}".format(len(good_set_pairs), bound))
+                    good_set_pairs.append(scores)
+            logging.info("{0} unigram set pairs found at bound {1}".format(len(good_set_pairs), bound))
             
+            to_remove = []
+            for scores in good_set_pairs:
+                # keep only the best right now
+                src, tgt, score  = scores[0]
+                self._dict[(tuple(src), tuple(tgt), True)] = score
+                for src_ in src:
+                    for tgt_ in tgt:
+                        to_remove.append((src_, tgt_))
 
-            for src, scores in good_set_pairs:
-                for tgt, score in scores:
-                    self._dict[(src.pop(), tgt, True)] = score
-                    # keep now only the best
-                    break
-            self._bicorpus.remove_ngram_pairs([(src_, tgt_) for src, scores in good_set_pairs for tgt, _ in scores for src_ in src for tgt_ in tgt])
+            logging.info("Searching for unigram set pairs done")
+
+            self._bicorpus.remove_ngram_pairs(to_remove)
 
             self._bicorpus.build_cache()
 
@@ -334,9 +339,6 @@ def main():
     #print asizeof(bc._src)
     #print asizeof(bc._tgt)
     #print asizeof(bc.interesting)
-    #print asizeof(bc._coocc_cache)
-    #bc.filter_interesting_pairs()
-    #print asizeof(bc.interesting)
     #from pympler import muppy
     #all_objects = muppy.get_objects()
     #from pympler import summary
@@ -361,9 +363,10 @@ def main():
                                       " ".join(bc._tgt.ints_to_tokens(tgt)),).encode("utf-8")
         elif len(p) == 3:
             src, tgt, _ = p
-            for tgt_tok in tgt:
-                print u"{0}\t{1}\t{2}".format(db._dict[p],
-                                      " ".join(bc._src.ints_to_tokens(src)),
+            for src_tok in src:
+                for tgt_tok in tgt:
+                    print u"{0}\t{1}\t{2}".format(db._dict[p],
+                                      " ".join(bc._src.ints_to_tokens(src_tok)),
                                       " ".join(bc._tgt.ints_to_tokens(tgt_tok)),).encode("utf-8")
     if rem is not None:
         bc.write(open(rem, "w")) 
