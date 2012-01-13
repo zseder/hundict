@@ -1,7 +1,6 @@
 from math import log
 import logging
 from optparse import OptionParser
-import time
 import sys
 
 from dictionary import Dictionary
