@@ -201,6 +201,10 @@ class BiCorpus:
                 for tgt_toks in combinations(sorted_possible_tgts, subset_len):
                     tgt_occ = set()
                     if subset_len > 1:
+                        # speedup: if we want to match a word for a set of others, we
+                        # filter low frequency words
+                        if len(src_occ) <= 20:
+                            break
                         
                         # creating union of sets
                         # check if there are at least two independent occurences
