@@ -1,0 +1,13 @@
+hundict is an experimental python project, that creates bilingual dictionary
+from parallel corpora
+Features (planned or done):
+- easy to use (see hundict -h)
+- fast (python fast, of course, not C fast)
+- unigram pairs
+  - A - B
+- ngram-ngram extraction, not only unigram-unigram
+  - ABC - DE
+- multiple choice pairs
+  - (A or B) - C
+- stopword remove
+- remaining corpora print
