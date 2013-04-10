@@ -12,14 +12,23 @@ class DictBuilder:
         self._scorer = scorer
         self._dict = Dictionary()
 
+        # TODO create options from these
+        self.set_bound_multiplier = 10
+        self.strdiff = True
+        self.ngrams = False
+        self.sets = False
+        self.sparse_bound = 5
+        self.uniset_min = 2
+        self.uniset_max = 3
+
     def filter_mutual_pairs(self, pairs):
         best_src = {}
         best_tgt = {}
         scores = {}
-        for pair in pairs:
-            ngram_pair, score = pair
+        for ngram_pair in pairs:
+            score = pairs[ngram_pair]
             src, tgt = ngram_pair
-            scores[pair[0]] = score
+            scores[ngram_pair] = score
             # if already saved, 
             if best_src.has_key(src):
                 # save if better
@@ -109,20 +118,20 @@ class DictBuilder:
             src, tgt = ngram_pair
             if len(src) > 1:
                 parents.append((src[1:], tgt))
-                parents.append(__ngram_pair_parents((src[1:], tgt)))
+                parents += __ngram_pair_parents((src[1:], tgt))
                 parents.append((src[:-1], tgt))
-                parents.append(__ngram_pair_parents((src[:-1], tgt)))
+                parents += __ngram_pair_parents((src[:-1], tgt))
             if len(tgt) > 1:
                 parents.append((src, tgt[1:]))
-                parents.append(__ngram_pair_parents((src, tgt[1:])))
+                parents += __ngram_pair_parents((src, tgt[1:]))
                 parents.append((src, tgt[:-1]))
-                parents.append(__ngram_pair_parents((src, tgt[:-1])))
+                parents += __ngram_pair_parents((src, tgt[:-1]))
             return parents
         
         logging.info("Extending dictionary with ngrams started.")
         to_delete = set()
         new_pairs = {}
-        orig_pairs = dict(pairs)
+        orig_pairs = pairs
         status = 0
         for pair in orig_pairs.iterkeys():
             if status * 100 / len(orig_pairs) > (status + 1) * 100 / len(orig_pairs):
@@ -137,7 +146,6 @@ class DictBuilder:
                 continue
             else:
                 better_pair, better_score = better
-                #print self._bicorpus._src.ints_to_tokens(better_pair[0]), self._bicorpus._tgt.ints_to_tokens(better_pair[1]), better_score
 
                 # check if it is a trivial pair
                 if (len(better_pair[0]) == len(better_pair[1]) and
@@ -148,6 +156,7 @@ class DictBuilder:
                 # if there isnt, keep new child and remove worse parents
                 is_better_parent = False
                 parents = __ngram_pair_parents(pair)
+                parents = __ngram_pair_parents(better_pair)
                 for parent in parents:
                     if parent in orig_pairs:
                         if orig_pairs[parent] > better_score:
@@ -156,97 +165,122 @@ class DictBuilder:
                 if not is_better_parent:
                     new_pairs[better_pair] = better_score
                     to_delete |= set(parents)
+                    logging.debug("{0} is better than {1}".format(
+                        better_pair, parents))
 
         for p in to_delete:
             if p in orig_pairs:
                 del orig_pairs[p]
 
-        logging.info("Extending dictionary with ngrams finished.")
+        logging.info("Extending dictionary with ngrams finished with " +
+                    "{0} new pairs.".format(len(new_pairs)))
         return dict(orig_pairs.items() + new_pairs.items())
+
+    def remove_ngram_pairs(self, pairs):
+        for pair in pairs:
+            score = pairs[pair]
+            self._dict[pair] = score
+        self._bicorpus.remove_ngram_pairs(pairs.keys())
+        self._bicorpus.build_cache()
+
+    def build_low_strdiff_pairs(self):
+        if not self.strdiff:
+            return
+
+        good_pairs = self._bicorpus.get_low_strdiff_pairs()
+        for p in good_pairs:
+            cont_table = self._bicorpus.contingency_table(p[0])
+            score = self.score(cont_table)
+            self._dict[p[0]] = p[1]
+            logging.debug("Pair added. ({0})".format(score))
+        self._bicorpus.remove_ngram_pairs([p for p in self._dict])
+
+    def build_unigram_pairs(self, bound):
+        # get all possible unigram pairs
+        unigram_pairs = self._bicorpus.generate_unigram_pairs()
+
+        # filter by sparsity
+        filtered_pairs = (pair for pair in unigram_pairs if
+                          pair[1][0] + pair[1][1] >= self.sparse_bound and
+                          pair[1][0] + pair[1][2] >= self.sparse_bound)
+
+
+        # count score
+        scored_pairs = dict((pair[0], self.score(pair[1])) 
+                            for pair in filtered_pairs)
+
+        goods = dict(((pair[0], pair[1]), score)
+                 for pair, score in scored_pairs.iteritems() if score >= bound)
+
+        res = dict(self.filter_mutual_pairs(goods))
+        logging.info("{0} unigram pairs found at bound {1}".format(len(res), bound))
+        return res
+
+    def build_unigram_set_pairs(self, bound):
+        """ function to look for pairs, that can be translation pairs only if
+        one of the languages contains at least two words. Not ngrams, but
+        words, and every time one of them is a translation"""
+        logging.info("Searching for unigram set pairs...")
+        good_set_pairs = []
+        for results in self._bicorpus.generate_unigram_set_pairs(
+                min_len=self.uniset_min, max_len=self.uniset_max):
+            scores = []
+            #collect only good scores
+            for src, tgt, table in results:
+                score = self.score(table)
+                if score < bound:
+                    continue
+                scores.append((src, tgt, score))
+            
+            if len(scores) > 0:
+                #sort scores and append
+                scores.sort(key=lambda x: x[2], reverse=True)
+                good_set_pairs.append(scores)
+        logging.info("{0} unigram set pairs found at bound {1}".format(
+            len(good_set_pairs), bound))
+        
+        to_remove = []
+        for scores in good_set_pairs:
+            # keep only the best right now
+            src, tgt, score  = scores[0]
+            self._dict[(tuple(src), tuple(tgt), True)] = score
+            for src_ in src:
+                for tgt_ in tgt:
+                    to_remove.append((src_, tgt_))
+
+        self._bicorpus.remove_ngram_pairs(to_remove)
+        self._bicorpus.build_cache()
+        logging.info("Searching for unigram set pairs done")
+
+    def build_iter(self, bound):
+        # TODO Cleaning corpus from sentences that contain >=2 hapaxes
+
+        mutual_pairs = self.build_unigram_pairs(bound)
+
+        # extend unigrams to ngrams
+        if self.ngrams:
+            new_ngram_pairs = self.extend_with_ngrams(mutual_pairs)
+        else:
+            new_ngram_pairs = mutual_pairs
+
+        # remove pairs that are found to be good and yield them
+        self.remove_ngram_pairs(new_ngram_pairs)
+        
+        # searching for unigram set pairs
+        if self.sets:
+            self.build_unigram_set_pairs(self.set_bound_multiplier * bound)
         
     def build(self, bound, iters):
         logging.info("Building dictionary started...")
 
         # searching for low strdiff pairs first
-        good_pairs = self._bicorpus.get_low_strdiff_pairs()
-        for p in good_pairs:
-            cont_table = self._bicorpus.contingency_table(p[0])
-            score = self.score(cont_table)
-            if score > bound:
-                self._dict[p[0]] = p[1]
-                logging.debug("Pair accepted. ({0})".format(score))
-            else:
-                logging.debug("Pair declined. ({0})".format(score))
-        self._bicorpus.remove_ngram_pairs([p for p in self._dict])
+        self.build_low_strdiff_pairs()
 
-        for _iter in xrange(iters):
-            bound *= 2.0
         for _iter in xrange(iters):
             logging.info("{0}.iteration started".format(_iter))
-
-            # Cleaning corpus from sentences that contain >=2 hapaxes
-
-            # get all possible unigram pairs
-            unigram_pairs = self._bicorpus.generate_unigram_pairs()
-
-            # count score
-            scored_pairs = ((pair[0], self.score(pair[1]) )for pair in unigram_pairs)
-
-            goods = (((pair[0], pair[1]), score) for pair, score in scored_pairs if score >= bound)
-            mutual_pairs = list(self.filter_mutual_pairs(goods))
-
-            # extend unigrams to ngrams
-            logging.info("{0} unigram pairs found at bound {1}".format(len(mutual_pairs), bound))
-            new_ngram_pairs = self.extend_with_ngrams(mutual_pairs)
-            #new_ngram_pairs = mutual_pairs
-
-            # get context of candidates
-
-            # filter results by a sparse checker
-
-            # remove pairs that are found to be good and yield them
-            for pair in new_ngram_pairs:
-                score = new_ngram_pairs[pair]
-                self._dict[pair] = score
-            self._bicorpus.remove_ngram_pairs([k[0] for k in mutual_pairs])
-            
-            self._bicorpus.build_cache()
-            
-            # searching for unigram set pairs
-            logging.info("Searching for unigram set pairs...")
-            good_set_pairs = []
-            for results in self._bicorpus.generate_unigram_set_pairs(min_len=2, max_len=4):
-                scores = []
-                #collect only good scores
-                for src, tgt, table in results:
-                    score = self.score(table)
-                    if score < 10 * bound:
-                        continue
-                    scores.append((src, tgt, score))
-                
-                if len(scores) > 0:
-                    #sort scores and append
-                    scores.sort(key=lambda x: x[1], reverse=True)
-                    good_set_pairs.append(scores)
-            logging.info("{0} unigram set pairs found at bound {1}".format(len(good_set_pairs), bound))
-            
-            to_remove = []
-            for scores in good_set_pairs:
-                # keep only the best right now
-                src, tgt, score  = scores[0]
-                self._dict[(tuple(src), tuple(tgt), True)] = score
-                for src_ in src:
-                    for tgt_ in tgt:
-                        to_remove.append((src_, tgt_))
-
-            logging.info("Searching for unigram set pairs done")
-
-            self._bicorpus.remove_ngram_pairs(to_remove)
-
-            self._bicorpus.build_cache()
-
-            bound /= 2.0
+            self.build_iter(bound)
             logging.info("iteration finished.")
+            bound /= 2.0
 
     def score(self, cont_table):
         try:
@@ -259,10 +293,8 @@ class DictBuilder:
         a,b,c,d = cont_table
         if weighted:
             return float(a) /(a+b+c+d) * log(float(a)*(a+b+c+d)/((a+b)*(a+c)),2)
-            #return float(a) / 1. * log(float(a)*(a+b+c+d)/((a+b)*(a+c)),2)
         else:
             return 1. /(a+b+c+d) * log(float(a)*(a+b+c+d)/((a+b)*(a+c)),2)
-            #return 1. / 1. * log(float(a)*(a+b+c+d)/((a+b)*(a+c)),2)
 
     @staticmethod
     def wmi(cont_table):
@@ -299,10 +331,10 @@ def parse_options(parser):
     punct = set([".", "!", "?", ",", "-", ":", "'", "...", "--", ";", "(", ")", "\""])
     src_stopwords = set(punct)
     if options.src_stop:
-        src_stopwords |= set(file(options.src_stop).read().decode("utf-8").rstrip("\n").split("\n"))
+        src_stopwords |= set(file(options.src_stop).read().rstrip("\n").split("\n"))
     tgt_stopwords = set(punct)
     if options.tgt_stop:
-        tgt_stopwords |= set(file(options.tgt_stop).read().decode("utf-8").rstrip("\n").split("\n"))
+        tgt_stopwords |= set(file(options.tgt_stop).read().rstrip("\n").split("\n"))
 
     # gold dict
     gold = Dictionary()
@@ -335,21 +367,6 @@ def main():
 
     bc.read_from_file(file(input_file))
 
-    #from pympler.asizeof import asizeof
-    #print asizeof(bc._src)
-    #print asizeof(bc._tgt)
-    #print asizeof(bc.interesting)
-    #from pympler import muppy
-    #all_objects = muppy.get_objects()
-    #from pympler import summary
-    #sum1 = summary.summarize(all_objects)
-    #summary.print_(sum1)
-    #quit()
-
-    #import pickle
-    #pickle.dump(bc, open("hunglish.bicorpus.pickle", "w"))
-    #quit()
-    
     bc.remove_ngram_pairs(gold)
 
     db = DictBuilder(bc, scorer)
@@ -358,20 +375,19 @@ def main():
     for p in db._dict:
         if len(p) == 2:
             src, tgt = p
-            print u"{0}\t{1}\t{2}".format(db._dict[p],
+            print "{0}\t{1}\t{2}".format(db._dict[p],
                                       " ".join(bc._src.ints_to_tokens(src)),
-                                      " ".join(bc._tgt.ints_to_tokens(tgt)),).encode("utf-8")
+                                      " ".join(bc._tgt.ints_to_tokens(tgt)),)
         elif len(p) == 3:
             src, tgt, _ = p
             for src_tok in src:
                 for tgt_tok in tgt:
-                    print u"{0}\t{1}\t{2}".format(db._dict[p],
+                    print "{0}\t{1}\t{2}".format(db._dict[p],
                                       " ".join(bc._src.ints_to_tokens(src_tok)),
-                                      " ".join(bc._tgt.ints_to_tokens(tgt_tok)),).encode("utf-8")
+                                      " ".join(bc._tgt.ints_to_tokens(tgt_tok)),)
     if rem is not None:
         bc.write(open(rem, "w")) 
 
 if __name__ == "__main__":
-    #import cProfile
-    #cProfile.run("main()")
     main()
+

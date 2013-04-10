@@ -30,7 +30,7 @@ class Dictionary:
     def read_from_file(cls, f):
         d = Dictionary()
         for l in f:
-            l = l.strip().decode("utf-8").split("\t")
+            l = l.strip().split("\t")
             if len(l) == 3:
                 try:
                     score = float(l[0])

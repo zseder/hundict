@@ -3,7 +3,7 @@ import gc
 from collections import defaultdict
 from itertools import combinations
 
-from langtools.utils.stringdiff import levenshtein
+from langtools.string.stringdiff import levenshtein
 
 from corpus import Corpus
 
@@ -18,7 +18,7 @@ class BiCorpus:
             src_sen, tgt_sen = self._src[sen_i], self._tgt[sen_i]
             src_str = " ".join(self._src.ints_to_tokens(src_sen.get_tokens(self._backup)))
             tgt_str = " ".join(self._tgt.ints_to_tokens(tgt_sen.get_tokens(self._backup)))
-            out.write(u"{0}\t{1}\n".format(src_str, tgt_str).encode("utf-8"))
+            out.write("{0}\t{1}\n".format(src_str, tgt_str))
 
     def add_sentence_pair(self, pair):
         src, tgt = pair
@@ -60,11 +60,6 @@ class BiCorpus:
     def filter_interesting_pairs(self, max_per_word=10):
         logging.info("Filtering interesting pairs...")
         
-        # there's no need for coocc cache in this phase. (should have been deleted
-        # earlier?)
-        if hasattr(self, "_coocc_cache"):
-            del self._coocc_cache
-
         for src in self.interesting[0]:
             self.interesting[0][src] = dict(sorted(self.interesting[0][src].iteritems(), key=lambda x: x[1], reverse=True)[:max_per_word])
         for tgt in self.interesting[1]:
@@ -172,10 +167,13 @@ class BiCorpus:
 
         logging.info("String difference phase done")
 
-    def __generate_unigram_pairs(self, min_coocc, max_coocc):
+    def generate_unigram_pairs(self, min_coocc=1, max_coocc=None):
+        """
+        Generates unigram pairs based on results of generate_unigram_set_pairs()
+        """
         # we don't need to run generate_unigram_set_pairs() in both ways,
         # because when searching for 1-1 unigrams, table will be symmetric
-        for result_for_one_ngram in self.generate_unigram_set_pairs(min_coocc, max_coocc, max_len=1, both_ways=True):
+        for result_for_one_ngram in self.generate_unigram_set_pairs(min_coocc, max_coocc, max_len=1, both_ways=False):
             # when running generate_unigram_set_pairs(), results are
             # collapsed by one src (or tgt in reverse mode) token for
             # later usage so here we need to handle them one by one
@@ -185,11 +183,14 @@ class BiCorpus:
                 tgt_ngram = tgt_ngram_set.pop()
                 yield ((src_ngram, tgt_ngram), table)
 
-    def generate_unigram_pairs(self, min_coocc=1, max_coocc=None):
-        for _ in self.__generate_unigram_pairs(min_coocc, max_coocc):
-            yield _
-
     def __generate_unigram_set_pairs(self, min_coocc=1, max_coocc=None, min_len=1, max_len=3, reverse=False):
+        """
+        Walks through cooccurences of one source token and target token sets
+        and yields their contingency table
+        Example yield:
+            (set([src_tok_1]), set([tgt_tok_1, tgt_tok_n]), cont_table)
+        right now only one of src and tgt sets can be longer than 1 (based on reverse)
+        """
         if reverse is False:
             src_index = self._src._index
             tgt_index = self._tgt._index
@@ -239,6 +240,8 @@ class BiCorpus:
                     else:
                         tgt_occ = tgt_index[tgt_toks[0][0]]
                     coocc = len(src_occ & tgt_occ)
+
+                    # if results are ok, yield them with contingency table
                     if (coocc >= min_coocc and (max_coocc is None or coocc <= max_coocc)):
                         cont_table = self.contingency_table(None, src_occ_s=src_occ, tgt_occ_s=tgt_occ, coocc_c=coocc)
                         if reverse is False:
@@ -326,7 +329,7 @@ class BiCorpus:
             l = l.rstrip("\n")
             if len(l) == 0:
                 continue
-            src, tgt = l.decode("utf-8").split("\t")
+            src, tgt = l.split("\t")
             
             #if no-token sentence -> skip it
             if len(src) == 0 or len(tgt) == 0:

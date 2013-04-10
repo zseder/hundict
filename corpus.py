@@ -105,11 +105,11 @@ class Corpus:
             sen.remove_ngram(ngram, backup)
 
             # maintaining index
-            for tok in ngram:
-                if not tok in sen:
-                    self._index[tok].remove(sen_i)
-                    if len(self._index[tok]) == 0:
-                        del self._index[tok]
+            #for tok in ngram:
+                #if not tok in sen:
+                    #self._index[tok].remove(sen_i)
+                    #if len(self._index[tok]) == 0:
+                        #del self._index[tok]
 
     def tokens_to_ints(self, tokens):
         # sometimes tokens are already changed
@@ -140,7 +140,7 @@ class Corpus:
 
             # removed tokens in backup mode
             else:
-                tokens.append(u"[{0}]".format(self._reverse_tokmap[i[0]]))
+                tokens.append("[{0}]".format(self._reverse_tokmap[i[0]]))
         return tokens
 
     def set_stopwords(self, stopwords):
@@ -158,6 +158,6 @@ class Corpus:
     def read_from_file(f):
         c = Corpus()
         for l in f:
-            le = l.strip().decode("utf-8").split()
+            le = l.strip().split()
             c.append(Sentence(le))
 
