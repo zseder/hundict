@@ -7,19 +7,19 @@ from dictionary import Dictionary
 from bicorpus import BiCorpus
 
 class DictBuilder:
-    def __init__(self, bicorpus, scorer):
+    def __init__(self, bicorpus, scorer, bound_multiplier, strdiff, ngrams,
+                 sets, sparse_bound, uniset_min, uniset_max):
         self._bicorpus = bicorpus
         self._scorer = scorer
         self._dict = Dictionary()
 
-        # TODO create options from these
-        self.set_bound_multiplier = 10
-        self.strdiff = True
-        self.ngrams = False
-        self.sets = False
-        self.sparse_bound = 5
-        self.uniset_min = 2
-        self.uniset_max = 3
+        self.set_bound_multiplier = bound_multiplier
+        self.strdiff = strdiff
+        self.ngrams = ngrams
+        self.sets = sets
+        self.sparse_bound = sparse_bound
+        self.uniset_min = uniset_min
+        self.uniset_max = uniset_max
 
     def filter_mutual_pairs(self, pairs):
         best_src = {}
@@ -92,13 +92,16 @@ class DictBuilder:
             src_occ = self._bicorpus._src.ngram_index(src)
             tgt_occ = self._bicorpus._tgt.ngram_index(tgt)
             ngram_indices = src_occ & tgt_occ
-            children = self._bicorpus.ngram_pair_neighbours(actual_pair, ngram_indices)
+            children = self._bicorpus.ngram_pair_neighbours(actual_pair,
+                                                            ngram_indices)
             for child in children:
                 child_pair, _, src_changed = child
                 if src_changed:
-                    table = self._bicorpus.contingency_table(child_pair, tgt_occ_s=tgt_occ)
+                    table = self._bicorpus.contingency_table(child_pair,
+                        tgt_occ_s=tgt_occ)
                 else:
-                    table = self._bicorpus.contingency_table(child_pair, src_occ_s=src_occ)
+                    table = self._bicorpus.contingency_table(child_pair, 
+                        src_occ_s=src_occ)
                 child_score = self.score(table)
                 if child_score / max_score > ratio:
                     to_process.add((child_pair, child_score))
@@ -149,7 +152,8 @@ class DictBuilder:
 
                 # check if it is a trivial pair
                 if (len(better_pair[0]) == len(better_pair[1]) and
-                    reduce(lambda x,y: x and y, ((((x,),(y,)) in orig_pairs) for x,y in zip(better_pair[0], better_pair[1])))):
+                    reduce(lambda x,y: x and y, ((((x,),(y,)) in orig_pairs) 
+                           for x,y in zip(better_pair[0], better_pair[1])))):
                     continue
 
                 # if there is a better parent, keep that and throw new child away,
@@ -308,11 +312,37 @@ class DictBuilder:
 def create_option_parser():
     parser = OptionParser("usage: %prog [options] input_file bound scorer")
     parser.add_option("-d", "--dict", dest="dict", help="gold dict file")
-    parser.add_option("", "--src_stopwords", dest="src_stop", help="src stopwords file")
-    parser.add_option("", "--tgt_stopwords", dest="tgt_stop", help="tgt stopwords file")
-    parser.add_option("", "--iter", dest="iters", help="number of iterations")
-    parser.add_option("-r", "--remaining", dest="remaining", help="output file for remaining corpus")
-    parser.add_option("-l", "--loglevel", dest="loglevel", help="logging level. [DEBUG/INFO/WARNING/ERROR/CRITICAL]")
+    parser.add_option("", "--src_stopwords", dest="src_stop",
+                      help="src stopwords file")
+    parser.add_option("", "--tgt_stopwords", dest="tgt_stop",
+                      help="tgt stopwords file")
+    parser.add_option("", "--iter", dest="iters", default=3,
+                      help="number of iterations [default=%default]")
+    parser.add_option("-r", "--remaining", dest="remaining", 
+                      help="output file for remaining corpus")
+    parser.add_option("-l", "--loglevel", dest="loglevel", default="ERROR",
+                      help="logging level. [DEBUG/INFO/WARNING/ERROR/" + 
+                      "CRITICAL], [default=%default]")
+    
+    parser.add_option("", "--strdiff", dest="strdiff", action="store_true",
+                      help="string difference based method at first")
+    parser.add_option("", "--ngrams", dest="ngrams", action="store_true",
+                      help="After founding unigram pairs, run extending " +
+                     "method for looking for ngram pairs")
+    parser.add_option("", "--sets", dest="sets", action="store_true",
+                      help="unigram set pair mode")
+    parser.add_option("", "--sparse_bound", dest="sparse_bound", default=5,
+                      help="words are discarded below this frequency " +
+                     "[default=%default]")
+    parser.add_option("", "--uniset_min", dest="uniset_min", default=2,
+                      help="when in unigram set pair mode, the minimum " +
+                     "length of a unigram set to regard [default=%default]")
+    parser.add_option("", "--uniset_max", dest="uniset_max", default=5,
+                      help="see uniset_min option [default=%default]")
+    parser.add_option("", "--set_bound_multiplier", dest="bound_multiplier",
+                      default=5.0, help="multiplier for the bound when in " + 
+                      "set mode [default=%default]")
+    
     return parser
 
 def parse_options(parser):
@@ -321,11 +351,7 @@ def parse_options(parser):
     bound = float(args[1])
     scorer = args[2]
 
-    # Default values for options
-    # iters
-    iters = 3
-    if options.iters:
-        iters = int(options.iters)
+    iters = int(options.iters)
 
     # stopwords
     punct = set([".", "!", "?", ",", "-", ":", "'", "...", "--", ";", "(", ")", "\""])
@@ -345,18 +371,29 @@ def parse_options(parser):
     if options.remaining:
         rem = options.remaining
 
-    if options.loglevel:
-        try:
-            logging.basicConfig(level=logging.__dict__[options.loglevel], format="%(asctime)s : %(module)s - %(levelname)s - %(message)s")
-        except KeyError:
-            print "Not a logging level. See(k) help."
-            sys.exit(-1)
+    try:
+        logging.basicConfig(level=logging.__dict__[options.loglevel], format="%(asctime)s : %(module)s - %(levelname)s - %(message)s")
+    except KeyError:
+        print "Not a logging level."
+        sys.exit(-1)
 
-    return input_file, bound, scorer, iters, src_stopwords, tgt_stopwords, gold, rem
+    bound_multiplier=int(options.bound_multiplier)
+    strdiff = options.strdiff
+    ngrams = options.ngrams
+    sets = options.sets
+    sparse_bound = int(options.sparse_bound)
+    uniset_min = int(options.uniset_min)
+    uniset_max = int(options.uniset_max)
+
+    return (input_file, bound, scorer, iters, src_stopwords, tgt_stopwords,
+            gold, rem, bound_multiplier, strdiff, ngrams, sets, sparse_bound,
+            uniset_min, uniset_max)
 
 def main():
     optparser = create_option_parser()
-    input_file, bound, _scorer, iters, srcstop, tgtstop, gold, rem = parse_options(optparser)
+    (input_file, bound, _scorer, iters, srcstop, tgtstop, gold, rem,
+     bound_multiplier, strdiff, ngrams, sets, sparse_bound, uniset_min,
+     uniset_max) = parse_options(optparser)
     scorer = getattr(DictBuilder, _scorer)
 
     backup = rem is not None
@@ -369,8 +406,8 @@ def main():
 
     bc.remove_ngram_pairs(gold)
 
-    db = DictBuilder(bc, scorer)
-
+    db = DictBuilder(bc, scorer, bound_multiplier, strdiff, ngrams, sets, sparse_bound, uniset_min, uniset_max)
+    
     db.build(bound, iters=iters)
     for p in db._dict:
         if len(p) == 2:
