@@ -10,13 +10,16 @@ def replace_in_input(input_fn, opt):
         for i, tokens in enumerate(line):
             for t in tokens:
                 tokens_cnt[i][t] += 1
+    print tokens_cnt[0][u'.']            
     named_entities, tokens_cnt = get_named_entities(tokens_cnt, opt)  
     # strings are in lower form
 
     if opt.ne_replacement == False:
         named_entities = ({}, {})
-
+    
+#    print named_entities
     tokens_cnt = map_numeric_values(tokens_cnt, opt)
+
     rare_words = get_rare_words(tokens_cnt, opt)    
     
     #print rare_words 
@@ -75,12 +78,12 @@ def get_named_entities(tokens_cnt, opt):
     for i, tok_cnt in enumerate(tokens_cnt):
             tok_cnt_keys = tok_cnt.keys()
             for tok in tok_cnt_keys:
-                if not tok.islower():
-                    if lower(tok) not in tok_cnt or float(tok_cnt[tok])/float(tok_cnt[lower(tok)]) > 5:
-                        named_entities[i][lower(tok)] = 1
-                    tok_cnt[lower(tok)] = tok_cnt[lower(tok)] + tok_cnt[tok]
+                if not tok.islower() and not lower(tok) == tok:
+                        if lower(tok) not in tok_cnt or float(tok_cnt[tok])/float(tok_cnt[lower(tok)]) > 2:
+                            named_entities[i][lower(tok)] = 1
+                        tok_cnt[lower(tok)] = tok_cnt[lower(tok)] + tok_cnt[tok]
             for tok in tok_cnt_keys:  
-                if not tok.islower():
+                if not tok.islower() and not lower(tok) == tok:
                     tok_cnt[tok] = 0
     return named_entities, tokens_cnt    
 
@@ -100,10 +103,12 @@ def process_token(t_, opt):
 def get_tokens(fn):
     f = open(fn)
     for l in f:
-        s1, s2 = l.split('\t')
-        t1 = tokenize(s1.decode('utf8'))
-        t2 = tokenize(s2.decode('utf8'))
-        yield (t1, t2)
+        if len(l.split('\t')) == 2:
+            s1, s2 = l.split('\t')
+
+            t1 = tokenize(s1.decode('utf8', 'ignore'))
+            t2 = tokenize(s2.decode('utf8', 'ignore'))
+            yield (t1, t2)
     f.close()
 
 def tokenize(sen):
