@@ -10,7 +10,7 @@ def replace_in_input(input_fn, opt):
         for i, tokens in enumerate(line):
             for t in tokens:
                 tokens_cnt[i][t] += 1
-    print tokens_cnt[0][u'.']            
+    #print tokens_cnt[0][u'.']            
     named_entities, tokens_cnt = get_named_entities(tokens_cnt, opt)  
     # strings are in lower form
 
