@@ -3,7 +3,7 @@ import gc
 from collections import defaultdict
 from itertools import combinations
 
-from langtools.string.stringdiff import levenshtein
+from hunmisc.string.stringdiff import levenshtein
 
 from corpus import Corpus
 
