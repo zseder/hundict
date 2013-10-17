@@ -10,19 +10,27 @@ def replace_in_input(input_fn, opt):
         for i, tokens in enumerate(line):
             for t in tokens:
                 tokens_cnt[i][t] += 1
-    print tokens_cnt[0][u'.']            
     named_entities, tokens_cnt = get_named_entities(tokens_cnt, opt)  
     # strings are in lower form
 
     if opt.ne_replacement == False:
         named_entities = ({}, {})
     
-#    print named_entities
     tokens_cnt = map_numeric_values(tokens_cnt, opt)
 
     rare_words = get_rare_words(tokens_cnt, opt)    
+
+    stopwords = get_stopwords(tokens_cnt, opt)
     
-    #print rare_words 
+    if opt.hide_tags:
+        print_with_hidden_tags(input_fn, named_entities, rare_words, stopwords)
+        
+    else:
+        print_with_tags(opt, input_fn, named_entities, rare_words, stopwords)
+
+
+def print_with_tags(opt, input_fn, named_entities, rare_words, stopwords):
+    
     for line in get_tokens(input_fn):
         out_str = ''
         for i, tokens in enumerate(line):
@@ -34,10 +42,28 @@ def replace_in_input(input_fn, opt):
                     out_str += ' _NUMERIC_'
                 elif t in rare_words[i]:
                     out_str += ' _RARE_'
+                elif t in stopwords[i]:
+                    out_str += ' _STOPWORD_'
                 else:
                     out_str += ' ' + t
             out_str += '\t'
         print out_str[:-1].encode('utf8')
+
+
+def print_with_hidden_tags(input_fn, named_entities, rare_words, stopwords):
+
+    to_be_left_out=(dict(named_entities[0].items()+rare_words[0].items()+stopwords[0].items()),\
+                    dict(named_entities[1].items()+rare_words[1].items()+stopwords[1].items()))
+
+    for line in get_tokens(input_fn):
+         out_str = ''
+         for i, tokens in enumerate(line):
+             for t_ in tokens:
+                 t = lower(t_)
+                 if t not in to_be_left_out[i]:
+                     out_str += ' ' + t
+             out_str += '\t'
+         print out_str[:-1].encode('utf8') 
 
 
 def get_rare_words(tokens_cnt, opt):
@@ -59,6 +85,25 @@ def get_rare_words(tokens_cnt, opt):
                 rare_words[i][item[0]] = 1
     return rare_words               
 
+def get_stopwords(tokens_cnt, opt):
+
+    stopwords = ({}, {})
+    if opt.freq_threshold == -1:
+        return stopwords
+    else:
+        for i, tok_cnt in enumerate(tokens_cnt):
+            freqs = sorted([(tok, tok_cnt[tok]) for tok in tok_cnt], key=lambda x:x[1], reverse = True)
+            thr_ind, limit_freq = opt.freq_threshold, freqs[min(opt.freq_threshold, len(freqs) - 1)]
+
+            next_freq = freqs[min(thr_ind + 1, len(freqs) - 1)]
+            while limit_freq == next_freq and thr_ind < len(freqs):
+                thr_ind += 1
+                next_freq = freqs[thr_ind][1]
+            
+            for item in freqs[:thr_ind]:
+                stopwords[i][item[0]] = 1
+    return stopwords            
+                
 
 def map_numeric_values(tokens_cnt, opt):
 
@@ -122,12 +167,19 @@ def create_option_parser():
     parser.add_option('-s', "--size of vocabulary retained", dest="rare_threshold", type="int",
                       default=-1, help="replace rare words with common symbol")
 
+    parser.add_option('-f', "--freq-based stop word list", dest='freq_threshold', type="int", 
+                      default=-1, help='replace most frequent words woth common symbol')
+
     parser.add_option('-n', "--numeric-values-replacement", action='store_true', dest='num_replacement',
                      help="replace numeric strings with common symbol", default=False)
 
 
     parser.add_option('-c', "--cap/noncap ratio based NE filter", action='store_true', dest='ne_replacement',
                      help='filter named entites based on ration of capitalized/noncapitalized form', default=False ) 
+
+    parser.add_option('-e', "--hiding tags", action='store_true', dest='hide_tags', 
+                     help='hide tags of filtered tokens', default=False)
+
 
     return parser
 
