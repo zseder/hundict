@@ -80,9 +80,11 @@ class CorpusProcessor(object):
                     if needed is None or w in needed:
                         freq[w] = freq.get(w, 0) + 1
 
-    def most_freq(self, wc):
+    def most_freq(self, wc, use_sample_ratio=False):
+        min_freq = (self.min_freq * self.sample_ratio if use_sample_ratio
+                    else self.min_freq)
         sorted_top = sorted(((w, c) for w, c in wc.iteritems()
-                             if c >= self.min_freq),
+                             if c >= min_freq),
                             key=lambda x: x[1], reverse=True)[:self.top]
         if len(sorted_top) == 0:
             return {}
@@ -109,14 +111,15 @@ class CorpusProcessor(object):
         logging.info("Collecting frequent words done.")
         return top1, top2
 
-    def add_to_context_freq(self, s, freq, needed):
+    def add_to_context_freq(self, s, freq, needed, scf):
         for i in xrange(len(s)):
             for l in xrange(1, min(len(s) - i, self.max_ngrams)):
                 if l == 1:
                     w = s[i]
                 else:
                     w = tuple(s[i:i+l])
-                if w in needed:
+                if w in needed and w not in scf:
+
                     # change int to tuple for sum
                     if l == 1:
                         w = (w, )
@@ -135,21 +138,25 @@ class CorpusProcessor(object):
     def most_frequent_contexts(self, wc1, wc2):
         logging.info("Filter most frequent contexts with random sampling...")
         c = 0
-        needed1 = set(wc1.iterkeys()) - set(self.cf1.iterkeys())
-        needed2 = set(wc2.iterkeys()) - set(self.cf2.iterkeys())
         slen = int(round(len(self.c1) * self.sample_ratio))
+        cf1, cf2 = {}, {}
+
         for s1 in random.sample(self.c1, slen):
-            self.add_to_context_freq(s1, self.cf1, needed1)
+            self.add_to_context_freq(s1, cf1, wc1, self.scf1)
             c += 1
             if c * 5 / slen > (c - 1) * 5 / slen:
                 logging.info("filtering {0}% done".format(c * 50 / slen))
+        self.scf1 |= set(wc1.iterkeys())
+
         for s2 in random.sample(self.c2, slen):
-            self.add_to_context_freq(s2, self.cf2, needed2)
+            self.add_to_context_freq(s2, cf2, wc2, self.scf2)
             c += 1
             if c * 5 / slen > (c - 1) * 5 / slen:
                 logging.info("filtering {0}% done".format(c * 50 / slen))
-        top1 = self.most_freq(self.cf1)
-        top2 = self.most_freq(self.cf2)
+        self.scf2 |= set(wc2.iterkeys())
+
+        top1 = self.most_freq(cf1, True)
+        top2 = self.most_freq(cf2, True)
         logging.info("Filter most frequent contexts with random sampling done")
         return top1, top2
 
@@ -198,13 +205,13 @@ class CorpusProcessor(object):
     def extend_freq(self, top1, top2):
         merged1, merged2 = top1, top2
         # saved contexts
-        self.cf1, self.cf2 = {}, {}
+        self.scf1, self.scf2 = set(), set()
         while True:
             cf1, cf2 = self.context_freqs(merged1, merged2)
-            old_keys1 = set(top1.iterkeys())
-            old_keys2 = set(top2.iterkeys())
-            merged1 = self.merge_needed(top1, cf1)
-            merged2 = self.merge_needed(top2, cf2)
+            old_keys1 = set(merged1.iterkeys())
+            old_keys2 = set(merged2.iterkeys())
+            merged1 = self.merge_needed(merged1, cf1)
+            merged2 = self.merge_needed(merged2, cf2)
             change1 = len(set(merged1.iterkeys()) - old_keys1)
             change2 = len(set(merged2.iterkeys()) - old_keys2)
             logging.info("Extending resulted {0} and {1} new keys".format(
