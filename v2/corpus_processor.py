@@ -94,8 +94,8 @@ class CorpusProcessor(object):
         #tiesbut drop only when as long as top (don't drop if there are only
         # frequent words)
         res = dict((w, c) for w, c in sorted_top
-                   if not self.drop_last or
-                   (c != last_freq and len(sorted_top) != self.top))
+                   if not self.drop_last or len(sorted_top) != self.top or
+                   c != last_freq)
         return res
 
     def most_freq_words(self):
