@@ -19,7 +19,7 @@ def collapse_ngrams_in_sen(s, ngrams):
             if ngram in ngrams:
                 to_collapse.append((ngram, i, i + l))
 
-    to_collapse.sort(key=lambda x: ngrams[x[0]])
+    to_collapse.sort(key=lambda x: len(x[0]))
     while len(to_collapse) > 0:
         ngram, start, end = to_collapse.pop()
         del s[start:end]
@@ -133,22 +133,23 @@ class CorpusProcessor(object):
                         freq[wr] = freq.get(wr, 0) + 1
 
     def most_frequent_contexts(self, wc1, wc2):
-        cf1, cf2 = {}, {}
         logging.info("Filter most frequent contexts with random sampling...")
         c = 0
+        needed1 = set(wc1.iterkeys()) - set(self.cf1.iterkeys())
+        needed2 = set(wc2.iterkeys()) - set(self.cf2.iterkeys())
         slen = int(round(len(self.c1) * self.sample_ratio))
         for s1 in random.sample(self.c1, slen):
-            self.add_to_context_freq(s1, cf1, wc1)
+            self.add_to_context_freq(s1, self.cf1, needed1)
             c += 1
             if c * 5 / slen > (c - 1) * 5 / slen:
                 logging.info("filtering {0}% done".format(c * 50 / slen))
         for s2 in random.sample(self.c2, slen):
-            self.add_to_context_freq(s2, cf2, wc2)
+            self.add_to_context_freq(s2, self.cf2, needed2)
             c += 1
             if c * 5 / slen > (c - 1) * 5 / slen:
                 logging.info("filtering {0}% done".format(c * 50 / slen))
-        top1 = self.most_freq(cf1)
-        top2 = self.most_freq(cf2)
+        top1 = self.most_freq(self.cf1)
+        top2 = self.most_freq(self.cf2)
         logging.info("Filter most frequent contexts with random sampling done")
         return top1, top2
 
@@ -195,9 +196,11 @@ class CorpusProcessor(object):
         return self.most_freq(old)
 
     def extend_freq(self, top1, top2):
-        merged1, merged2 = None, None
+        merged1, merged2 = top1, top2
+        # saved contexts
+        self.cf1, self.cf2 = {}, {}
         while True:
-            cf1, cf2 = self.context_freqs(top1, top2)
+            cf1, cf2 = self.context_freqs(merged1, merged2)
             old_keys1 = set(top1.iterkeys())
             old_keys2 = set(top2.iterkeys())
             merged1 = self.merge_needed(top1, cf1)
