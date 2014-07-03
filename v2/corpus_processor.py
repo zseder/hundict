@@ -1,6 +1,8 @@
 import logging
 import random
 
+from hunmisc.intervaltree import IntervalTree
+
 
 def sen_to_ints(s, word_to_int):
     return [word_to_int.setdefault(w, len(word_to_int)) for w in s]
@@ -11,39 +13,31 @@ def line_to_bisent(l):
     return s1.split(), s2.split()
 
 
-def collapse_ngrams_in_sen(s, ngrams):
-    to_collapse = []
+def collapse_ngrams_in_sen(s, ngrams, max_len=5):
+    to_collapse = {}
     for i in xrange(len(s)):
-        for l in xrange(2, len(s) - i + 1):
+        for l in xrange(2, min(len(s) - i + 1, max_len)):
             ngram = tuple(s[i:i+l])
             if ngram in ngrams:
-                to_collapse.append((ngram, i, i + l))
+                to_collapse[(i, i + l)] = ngram
 
-    to_collapse.sort(key=lambda x: len(x[0]))
-    while len(to_collapse) > 0:
-        ngram, start, end = to_collapse.pop()
+    it = IntervalTree(to_collapse.keys())
+    p = it.best_path()
+
+    p.sort(key=lambda x: x[0], reverse=True)
+    while len(p) > 0:
+        interval = p.pop()
+        ngram = to_collapse[interval]
+        start, end = interval
         del s[start:end]
         s.insert(start, ngram)
-        new_to_collapse = []
-        for i in xrange(len(to_collapse)):
-            ngram_, start_, end_ = to_collapse[i]
-
-            # intersecting
-            if start_ < end and end_ > start:
-                continue
-
-            if start_ >= end:
-                # have to change indices because of replace
-                l = end - start - 1
-                new_to_collapse.append((ngram_, start_ - l, end_ - l))
-            else:
-                new_to_collapse.append(to_collapse[i])
-        to_collapse = new_to_collapse
 
 
 def collapse_ngrams_in_corpus(c, ngrams):
+    logging.info("Collapsing...")
     for s in c:
         collapse_ngrams_in_sen(s, ngrams)
+    logging.info("Collapsing done.")
 
 
 class CorpusProcessor(object):
@@ -52,7 +46,7 @@ class CorpusProcessor(object):
         self.sample_ratio = 0.05
         self.drop_last = True
         self.min_freq = 10
-        self.top = 1000000
+        self.top = 30000
 
     def read_bicorp(self, f):
         logging.info("Input reading...")
