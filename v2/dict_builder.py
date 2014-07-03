@@ -95,12 +95,12 @@ class DictBuilder(object):
 
     def generate_bests(self, co1, co2):
         c = 0
-        total = len(co1) + len(co2)
+        total = len(co1)
         for w in co1:
             # logging
             c += 1
-            if c * 100 / total > (c - 1) * 100 / total:
-                logging.info("Building {0}% done".format(c * 100 / total))
+            if c * 10 / total > (c - 1) * 10 / total:
+                logging.info("Building {0}% done".format(c * 10 / total))
 
             # sorting to compute only the best
             cos = sorted(((w, f) for w, f in co1[w].iteritems()
