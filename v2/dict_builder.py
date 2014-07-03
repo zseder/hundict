@@ -100,7 +100,7 @@ class DictBuilder(object):
             # logging
             c += 1
             if c * 10 / total > (c - 1) * 10 / total:
-                logging.info("Building {0}% done".format(c * 10 / total))
+                logging.info("Building {0}% done".format(c * 100 / total))
 
             # sorting to compute only the best
             cos = sorted(((w, f) for w, f in co1[w].iteritems()
@@ -116,7 +116,7 @@ class DictBuilder(object):
 
     def remove_pairs_from_co(self, pairs):
         for w1, w2 in pairs:
-            co = (self.co1[w1][w2] if w2 in self.co1[w1] else self.co1[w2][w1])
+            co = (self.co1[w1][w2] if w2 in self.co1[w1] else self.co2[w2][w1])
             self.co1[w1]["__sum__"] -= co
             self.co2[w2]["__sum__"] -= co
             if w2 in self.co1[w1]:
