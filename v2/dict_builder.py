@@ -77,9 +77,9 @@ class DictBuilder(object):
         self.co1 = {}
         self.co2 = {}
         for w in self.needed1:
-            self.co1[w] = {"__sum__": 0.0}
+            self.co1[w] = {"__sum__": 0}
         for w in self.needed2:
-            self.co2[w] = {"__sum__": 0.0}
+            self.co2[w] = {"__sum__": 0}
         for i in xrange(len(self.c1)):
             for w1 in self.c1[i]:
                 for w2 in self.c2[i]:
@@ -109,35 +109,33 @@ class DictBuilder(object):
                 continue
 
             w2, f = cos[0]
-            pc = f / co1[w]["__sum__"]
+            pc = f / float(co1[w]["__sum__"])
             if pc > 0.2:
                 yield (w, w2, pc,
                        co1[w]["__sum__"], co2[w2]["__sum__"])
 
     def remove_pairs_from_co(self, pairs):
-        for w1, w2, _, _, _ in pairs:
-            if w1 in self.co1 and w2 in self.co1[w1]:
-                self.co1[w1]["__sum__"] -= self.co1[w1][w2]
+        for w1, w2, _, f1, f2 in pairs:
+            co = (self.co1[w1][w2] if w2 in self.co1[w1] else self.co1[w2][w1])
+            self.co1[w1]["__sum__"] -= co
+            self.co2[w2]["__sum__"] -= co
+            if w2 in self.co1[w1]:
                 del self.co1[w1][w2]
-                self.co2[w2]["__sum__"] -= self.co1[w1][w2]
+            if w1 in self.co2[w2]:
                 del self.co2[w2][w1]
-            if w2 in self.co1 and w1 in self.co1[w2]:
-                self.co1[w2]["__sum__"] -= self.co1[w2][w1]
-                del self.co1[w2][w1]
-                self.co2[w1]["__sum__"] -= self.co1[w2][w1]
-                del self.co2[w1][w2]
 
     def build_pairs(self):
         for res in self.generate_bests(self.co1, self.co2):
             yield res
         for res in self.generate_bests(self.co2, self.co1):
-            yield res
+            yield res[1], res[0], res[2], res[3], res[4]
 
     def build_until(self):
-        all_pairs = []
+        all_pairs = {}
         while True:
             pairs = list(self.build_pairs())
-            all_pairs += pairs
+            for p in pairs:
+                all_pairs[(p[0], p[1])] = p[2:]
             self.remove_pairs_from_co(pairs)
             logging.info("Built {0} new pairs".format(len(pairs)))
             if len(pairs) < 10:
@@ -153,10 +151,9 @@ def main():
     itow = [w for w, _ in sorted(cp.wtoi.iteritems(), key=lambda x: x[1])]
     del cp
     db.build_coocc()
-    for res in db.build_until():
-        print "{0}\t{1}\t{2}\t{3}\t{4}".format(itow[res[0]], itow[res[1]],
-                                               res[2], res[3], res[4])
-    #db.build_pairs()
+    for pair, scores in db.build_until().iteritems():
+        print "{0}\t{1}\t{2}\t{3}\t{4}".format(itow[pair[0]], itow[pair[1]],
+                                               scores[0], scores[1], scores[2])
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
