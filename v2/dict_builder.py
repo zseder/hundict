@@ -133,10 +133,11 @@ class DictBuilder(object):
     def build_until(self):
         all_pairs = {}
         while True:
-            pairs = list(self.build_pairs())
-            for p in pairs:
-                all_pairs[(p[0], p[1])] = p[2:]
-            self.remove_pairs_from_co(pairs)
+            pairs = dict(((w1, w2), (pc, f1, f2))
+                         for w1, w2, pc, f1, f2 in self.build_pairs())
+            for p, s in pairs:
+                all_pairs[p] = s
+            self.remove_pairs_from_co(pairs.iterkeys())
             logging.info("Built {0} new pairs".format(len(pairs)))
             if len(pairs) < 10:
                 break
