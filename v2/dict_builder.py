@@ -119,9 +119,13 @@ class DictBuilder(object):
             if w1 in self.co1 and w2 in self.co1[w1]:
                 self.co1[w1]["__sum__"] -= self.co1[w1][w2]
                 del self.co1[w1][w2]
+                self.co2[w2]["__sum__"] -= self.co1[w1][w2]
+                del self.co2[w2][w1]
             if w2 in self.co1 and w1 in self.co1[w2]:
                 self.co1[w2]["__sum__"] -= self.co1[w2][w1]
                 del self.co1[w2][w1]
+                self.co2[w1]["__sum__"] -= self.co1[w2][w1]
+                del self.co2[w1][w2]
 
     def build_pairs(self):
         for res in self.generate_bests(self.co1, self.co2):
