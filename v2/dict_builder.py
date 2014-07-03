@@ -115,7 +115,7 @@ class DictBuilder(object):
                        co1[w]["__sum__"], co2[w2]["__sum__"])
 
     def remove_pairs_from_co(self, pairs):
-        for w1, w2, _, f1, f2 in pairs:
+        for w1, w2 in pairs:
             co = (self.co1[w1][w2] if w2 in self.co1[w1] else self.co1[w2][w1])
             self.co1[w1]["__sum__"] -= co
             self.co2[w2]["__sum__"] -= co
