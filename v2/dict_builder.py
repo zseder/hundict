@@ -93,32 +93,52 @@ class DictBuilder(object):
                 logging.info("coocc indexing {0}% done".format(
                     i * 100 / len(self.c1)))
 
-    def build_pairs(self):
+    def generate_bests(self, co1, co2):
         c = 0
-        total = len(self.co1) + len(self.co2)
-        for w1 in self.co1:
-            for w2 in self.co1[w1]:
-                if w2 == "__sum__":
-                    continue
-                pc = self.co1[w1][w2] / self.co1[w1]["__sum__"]
-                if pc > 0.5:
-                    yield w1, w2
-
+        total = len(co1) + len(co2)
+        for w in co1:
+            # logging
             c += 1
             if c * 100 / total > (c - 1) * 100 / total:
                 logging.info("Building {0}% done".format(c * 100 / total))
 
-        for w2 in self.co2:
-            for w1 in self.co2[w2]:
-                if w1 == "__sum__":
-                    continue
-                pc = self.co2[w2][w1] / self.co2[w2]["__sum__"]
-                if pc > 0.5:
-                    yield w2, w1
+            # sorting to compute only the best
+            cos = sorted(((w, f) for w, f in co1[w].iteritems()
+                          if w != "__sum__"), reverse=True, key=lambda x: x[1])
+            if len(cos) == 0:
+                continue
 
-            c += 1
-            if c * 100 / total > (c - 1) * 100 / total:
-                logging.info("Building {0}% done".format(c * 100 / total))
+            w2, f = cos[0]
+            pc = f / co1[w]["__sum__"]
+            if pc > 0.2:
+                yield (w, w2, pc,
+                       co1[w]["__sum__"], co2[w2]["__sum__"])
+
+    def remove_pairs_from_co(self, pairs):
+        for w1, w2, _, _, _ in pairs:
+            if w1 in self.co1 and w2 in self.co1[w1]:
+                self.co1[w1]["__sum__"] -= self.co1[w1][w2]
+                del self.co1[w1][w2]
+            if w2 in self.co1 and w1 in self.co1[w2]:
+                self.co1[w2]["__sum__"] -= self.co1[w2][w1]
+                del self.co1[w2][w1]
+
+    def build_pairs(self):
+        for res in self.generate_bests(self.co1, self.co2):
+            yield res
+        for res in self.generate_bests(self.co2, self.co1):
+            yield res
+
+    def build_until(self):
+        all_pairs = []
+        while True:
+            pairs = list(self.build_pairs())
+            all_pairs += pairs
+            self.remove_pairs_from_co(pairs)
+            logging.info("Built {0} new pairs".format(len(pairs)))
+            if len(pairs) < 10:
+                break
+        return all_pairs
 
 
 def main():
@@ -129,8 +149,9 @@ def main():
     itow = [w for w, _ in sorted(cp.wtoi.iteritems(), key=lambda x: x[1])]
     del cp
     db.build_coocc()
-    for i1, i2 in db.build_pairs():
-        print "{0}\t{1}".format(itow[i1], itow[i2])
+    for res in db.build_until():
+        print "{0}\t{1}\t{2}\t{3}\t{4}".format(itow[res[0]], itow[res[1]],
+                                               res[2], res[3], res[4])
     #db.build_pairs()
 
 if __name__ == "__main__":
